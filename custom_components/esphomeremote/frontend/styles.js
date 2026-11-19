@@ -474,6 +474,12 @@ ha-icon { --mdc-icon-size:20px; }
 .rsleiste span[data-ai], .lsvor span[data-ai] { cursor:grab; touch-action:none; } .rsleiste span.zieht, .lsvor span.zieht { opacity:.5; }
 .rsleiste span.ziel, .lsvor span.ziel { box-shadow:inset 0 0 0 2px #fff; }
 .lsfarben { display:flex; flex-wrap:wrap; gap:6px 12px; margin-bottom:8px; }
+.skinvs { display:inline-flex; align-items:center; gap:3px; padding:4px; border-radius:6px; border:1px solid var(--divider-color); flex:0 0 auto; }
+.skinvs > span { display:inline-flex; flex-direction:column; align-items:flex-start; font-size:11px; line-height:1.1; padding:2px 6px; border-radius:4px; border:1px solid; font-weight:600; }
+.skinvs > span small { font-size:9px; font-weight:400; } .skinvs > i { width:8px; height:18px; border-radius:3px; display:inline-block; }
+.skinfest { display:inline-flex; flex-direction:column; align-items:center; gap:2px; } .skinfest small { font-size:11px; }
+.skinkarte { border:1px solid var(--divider-color); border-radius:8px; padding:8px; margin:8px 0; } .skinkarte input[data-sk=name] { width:160px; }
+.skinkarte input[data-sk=dimmen] { width:56px; }
 .hleisten { flex-wrap:wrap; gap:6px 14px; align-items:center; } .hleisten small { color:var(--sec,#8b94a3); }
 .rsleiste small { font-size:var(--lfs); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .rshome .phead, .rshome .pinfo, .rshome .gl, .rshome .pscr, .rshome .pdunkel, .rshome .rs { display:none; }

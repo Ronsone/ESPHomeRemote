@@ -1,5 +1,15 @@
 # What's new · Was ist neu
 
+## Unreleased
+
+**Skins:** the whole interface can be recoloured – six built-in skins (Standard, Hell, OLED, Nord, Retro, Synthwave) and up to 8 own ones per remote, made in the configurator, optionally with a background image from the SD card. Switch on the remote (key/tile "Skin wechseln"), in the configurator (Settings › Anzeige) or with `select.<remote>_skin` in Home Assistant – instantly, without a restart. See [docs/skins.md](docs/skins.md).
+
+<details><summary>Deutsch</summary>
+
+**Skins:** Die ganze Oberfläche lässt sich umfärben – sechs eingebaute Skins (Standard, Hell, OLED, Nord, Retro, Synthwave) und bis zu 8 eigene je Remote, angelegt im Konfigurator, wahlweise mit Hintergrundbild von der SD-Karte. Umschalten an der Remote (Taste/Kachel „Skin wechseln“), im Konfigurator (Einstellungen › Anzeige) oder mit `select.<remote>_skin` in Home Assistant – sofort, ohne Neustart. Siehe [docs/skins.md](docs/skins.md).
+
+</details>
+
 ## 2026.11.21.1 (2026-11-21)
 
 - **ESPHome 2026.11:** the firmware builds again with ESPHome 2026.11 (network/HALINK, atv_voice, online_image, header layout).

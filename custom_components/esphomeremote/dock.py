@@ -226,7 +226,7 @@ class Verwalter:
         from .now_playing import JetztPlayer
         from .media_player import IrMediaPlayer
         from .remote import IrRemote
-        from .select import AktAuswahl
+        from .select import AktAuswahl, SkinAuswahl, skin_optionen
         from .switch import AktSchalter
 
         soll: dict[str, tuple[str, str, Any]] = {}
@@ -241,6 +241,10 @@ class Verwalter:
             if namen:
                 soll[f"{dev}_akt_auswahl"] = ("select", "|".join(namen),
                                               lambda dev=dev, namen=namen: AktAuswahl(self, f"{dev}_akt_auswahl", dev, namen))
+            # Skin je Remote (2026-11-19): eingebaute + eigene Skins; neu gebaut, wenn sich die Namen aendern
+            opt = skin_optionen(self.kd.entry(dev).get("config") or {})
+            soll[f"{dev}_skin"] = ("select", "|".join(n for _, n in opt),
+                                   lambda dev=dev, opt=opt: SkinAuswahl(self, f"{dev}_skin", dev, opt))
         # Streamer (streamer.py): Sensoren immer, Knoepfe nur mit ADB-Entitaet
         from .streamer import SENSOREN, StreamerKnopf, StreamerSensor
         for st in self.kd.data.get("streamer") or []:

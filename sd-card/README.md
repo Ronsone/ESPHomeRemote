@@ -11,6 +11,7 @@ OpenRemote Studio vorbereitet; unsere Dateien kommen dazu, ohne etwas Vorhandene
 | `/icons/Default`, `/icons/Custom/*.png` | Icons, 64x64 RGBA. `Custom` enthaelt unsere App-Logos | Studio (und spaeter die Firmware) |
 | `/covers/<app>_player.rle` | Logo-Cover der Medienseite, 240x320, RGB565 mit Lauflaengen-Kompression ("RL16"), ~5-13 KB | Firmware (`esphomeremote-sd-images.h`) |
 | `/covers/<app>_home.rle` | Cover-Banner der Startseite, 216x172, gleiches Format | Firmware |
+| `/themes/<skin>/background.rle` bzw. `.rgb565` | Hintergrundbild eines eigenen Skins, 240x320 (RL16 oder roh), `tools/make_skin_wallpaper.py` | Firmware (`esphomeremote-skin.h`, docs/skins.md) |
 
 (Aeltere rohe `.rgb565`-Dateien im selben Ordner werden nur noch gelesen, wenn keine `.rle` da ist; sie duerfen weg.)
 

@@ -102,6 +102,32 @@ def dev_slug(dev: str) -> str:
     return dev.replace("-", "_").lower()
 
 
+
+SKIN_FARBEN = ("hg", "karte", "karte2", "linie", "spur", "text", "matt", "akzent", "ok", "warn", "fehler")
+SKIN_MAX = 8
+
+
+def validate_skins(skins: list) -> list[dict]:
+    """Eigene Skins (2026-11-19): Name, Farben "#RRGGBB" (fehlend = aus dem Standard gemischt), Hintergrundbild."""
+    out: list[dict] = []
+    for sk in skins[:SKIN_MAX]:
+        if not isinstance(sk, dict):
+            sk = {}   # Platz behalten: die Remote waehlt eigene Skins ueber ihre Position (skin_nr = 10 + Index)
+        name = str(sk.get("name") or "").strip()[:24] or f"Skin {len(out) + 1}"
+        o: dict = {"name": name}
+        for k in SKIN_FARBEN:
+            v = str(sk.get(k) or "")
+            if re.fullmatch(r"#[0-9A-Fa-f]{6}", v):
+                o[k] = v.upper()
+        if sk.get("bild") is True:
+            o["bild"] = True
+            o["dimmen"] = max(0, min(90, int(sk.get("dimmen") if isinstance(sk.get("dimmen"), (int, float)) else 40)))
+            if sk.get("ueberall") is True:
+                o["ueberall"] = True
+        out.append(o)
+    return out
+
+
 def validate_config(cfg: dict) -> dict:
     """Prueft die Belegung grob und gibt eine bereinigte Kopie zurueck."""
     if not isinstance(cfg, dict):
@@ -168,6 +194,12 @@ def validate_config(cfg: dict) -> dict:
     # Akzentfarbe der Remote (2026-11-01): ersetzt das Blau ueberall (ausser den Bluetooth-Anzeigen)
     if re.fullmatch(r"#[0-9A-Fa-f]{6}", str(cfg.get("akzent") or "")):
         out["akzent"] = str(cfg["akzent"]).upper()
+    # Eigene Skins (2026-11-19, esphomeremote-skin.h): ganzes Farbpalett + optional Hintergrundbild von der SD-Karte.
+    # Auswahl je Remote ueber die Einstellung skin_nr (0-5 eingebaut, 10+i = skins[i]).
+    if isinstance(cfg.get("skins"), list):
+        out_skins = validate_skins(cfg["skins"])
+        if out_skins:
+            out["skins"] = out_skins
     if "menu" in cfg:
         out["menu"] = validate_menu(cfg["menu"])
     if isinstance(cfg.get("home"), dict):

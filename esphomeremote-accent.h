@@ -22,11 +22,14 @@ inline uint32_t mischen(uint32_t c, uint32_t z, int p) {
   auto k = [&](int s) { const int a = (c >> s) & 0xFF, b = (z >> s) & 0xFF; return (uint32_t) (a + (b - a) * p / 255) << s; };
   return k(16) | k(8) | k(0);
 }
-// Abstufungen wie beim Blau: gedrueckt dunkler, Rand heller, Flaechen sehr dunkel
+// Abstufungen wie beim Blau: gedrueckt dunkler, Rand heller, Flaechen sehr dunkel.
+// flaeche(): Richtung fuer die "sehr dunkle" Flaeche f[3] - Schwarz, ausser ein Skin (esphomeremote-skin.h) setzt
+// seinen Hintergrund (helle Skins: Akzentflaeche hell statt fast schwarz).
+inline uint32_t &flaeche() { static uint32_t f = 0x000000; return f; }
 struct Stufen { uint32_t f[5]; };
 inline Stufen stufen(uint32_t a) {
-  if (a == BLAU) return {{0x3B82F6, 0x2563EB, 0x60A5FA, 0x1E3A8A, 0x93C5FD}};
-  return {{a, mischen(a, 0x000000, 50), mischen(a, 0xFFFFFF, 70), mischen(a, 0x000000, 150), mischen(a, 0xFFFFFF, 130)}};
+  if (a == BLAU && flaeche() == 0x000000) return {{0x3B82F6, 0x2563EB, 0x60A5FA, 0x1E3A8A, 0x93C5FD}};
+  return {{a, mischen(a, 0x000000, 50), mischen(a, 0xFFFFFF, 70), mischen(a, flaeche(), 150), mischen(a, 0xFFFFFF, 130)}};
 }
 
 inline std::vector<lv_obj_t *> &ausnahmen() { static std::vector<lv_obj_t *> v; return v; }

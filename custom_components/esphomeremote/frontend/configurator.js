@@ -107,6 +107,8 @@ const INT_FNS = [
   ["activity_off", "Aktivität beenden"],
   ["keyboard", "Bildschirmtastatur zeigen"],
   ["kbd_light", "Tastenbeleuchtung an/aus"],
+  ["skin_next", "Skin wechseln (nächster)"],
+  ["skin", "Skin wählen …"],
   ["mic_toggle", "Mikrofon an/aus"],
   ["clean", "Reinigungsmodus (Zurück lang beendet)"],
   ["power_off", "Remote ausschalten"],
@@ -120,6 +122,22 @@ const INT_FNS = [
   ["popup_open", "Menüseite als Popup öffnen …"],
 ];
 const INT_LABEL = Object.fromEntries(INT_FNS);
+// Skins der Remote (2026-11-19, Firmware esphomeremote-skin.h): eingebaut = Nummer 0-5, eigene = 10 + Index in cfg.skins.
+// Farben wie skin::FESTE in der Firmware (fehlende = Standard), Vorlagen fuer "Neuer Skin".
+const SKIN_EIGENE_AB = 10;
+const SKIN_KEYS = [["hg", "Hintergrund"], ["karte", "Karten"], ["karte2", "Knöpfe"], ["linie", "Linien"], ["spur", "Regler-Spur"],
+  ["text", "Text"], ["matt", "Text grau"], ["akzent", "Akzent"], ["ok", "Grün/OK"], ["warn", "Warnung"], ["fehler", "Rot/Fehler"]];
+const SKIN_STANDARD = { hg: "#0E1116", karte: "#1A1F27", karte2: "#232A35", linie: "#2A3340", spur: "#3A424E", text: "#F1F3F5",
+  matt: "#8B94A3", akzent: "#3B82F6", ok: "#22C55E", warn: "#F59E0B", fehler: "#EF4444" };
+const SKINS_FEST = [
+  ["Standard", {}],
+  ["Hell", { hg: "#F3F4F6", karte: "#FFFFFF", karte2: "#E5E7EB", linie: "#D1D5DB", spur: "#CBD5E1", text: "#111827", matt: "#4B5563", akzent: "#2563EB", ok: "#16A34A", warn: "#D97706", fehler: "#DC2626" }],
+  ["OLED", { hg: "#000000", karte: "#0D0D0D", karte2: "#1A1A1A", linie: "#222222", spur: "#2E2E2E", text: "#FFFFFF", matt: "#9CA3AF" }],
+  ["Nord", { hg: "#2E3440", karte: "#3B4252", karte2: "#434C5E", linie: "#4C566A", spur: "#56607A", text: "#ECEFF4", matt: "#9AA5B8", akzent: "#88C0D0", ok: "#A3BE8C", warn: "#EBCB8B", fehler: "#BF616A" }],
+  ["Retro", { hg: "#0B0A07", karte: "#17140D", karte2: "#211C12", linie: "#2E2618", spur: "#3A3020", text: "#FFD9A0", matt: "#B08D57", akzent: "#FFB000", ok: "#7FD15A", warn: "#FF8C00", fehler: "#FF5544" }],
+  ["Synthwave", { hg: "#120B1E", karte: "#1E1430", karte2: "#2A1C42", linie: "#3A2858", spur: "#47306B", text: "#F5E9FF", matt: "#A08CC0", akzent: "#FF3EA5", ok: "#3EF7C4", warn: "#FFB347", fehler: "#FF4D6D" }],
+];
+const skinSlug = (n) => String(n || "").toLowerCase().replace(/[^a-z0-9 _-]/g, "").replace(/[ _-]+/g, "_").replace(/^_+|_+$/g, "") || "skin";
 // Steuerkreuz-Assistent: [Feld, Taste, Name, Symbol, Namensmuster der Kamera-Tasten, Spalte, Zeile im Block]
 const DPAD_RICHTUNGEN = [
   ["hoch", 14, "Hoch", "arrow-up", ["hoch", "up", "oben", "tilt_up"], 2, 0],
@@ -759,6 +777,7 @@ class EsphomeremoteKonfigurator extends HTMLElement {
       }
       case "int":
         if (s.fn === "activity") return `Aktivität: ${this.cfg.activities[s.arg]?.name ?? s.arg}`;
+        if (s.fn === "skin") return `Skin: ${this._skinOptionen().find(([n]) => n === s.arg)?.[1] ?? s.arg}`;
         return INT_LABEL[s.fn] || s.fn;
       case "ir": return s.n ? `IR ${s.n}` : Array.isArray(s.raw) ? `IR roh (${s.raw.length} Werte)` : `IR ${s.proto || "NEC"} ${hex(s.addr || 0)}/${hex(s.cmd || 0)}`;
       case "rf": return s.n ? `433 MHz ${s.n}` : s.raw?.length ? `433 MHz (${s.raw.length} Werte)` : "433 MHz – noch nicht angelernt";
@@ -969,7 +988,8 @@ class EsphomeremoteKonfigurator extends HTMLElement {
       ${this._mGrp("rfarben", "mdi:palette-outline", "Farben dieser Remote", Object.keys(this.cfg?.rfarben || {}).length ? "angepasst" : "Standard", `
         <div class="lsfarben">${RF_NAMEN.map(([k, n]) => `<label class="farbe"><input type="color" data-rf="${k}" value="${rf[k]}"><span>${n}</span>${this.cfg?.rfarben?.[k] ? `<button class="icon sm" data-a="rfweg" data-k="${k}" title="Standard"><ha-icon icon="mdi:close"></ha-icon></button>` : ""}</label>`).join("")}</div>
         <small class="note">Nur für die Ansicht hier, links in der Navigation und in der Übersicht – damit du die Remotes auseinanderhältst.</small>`, false)}
-      ${this._mGrp("akzent", "mdi:format-color-fill", "Akzentfarbe auf der Remote", this.cfg?.akzent ? this.cfg.akzent : "Blau (Standard)", `${this._akzentHtml()}`, false)}`;
+      ${this._mGrp("akzent", "mdi:format-color-fill", "Akzentfarbe auf der Remote", this.cfg?.akzent ? this.cfg.akzent : "Blau (Standard)", `${this._akzentHtml()}`, false)}
+      ${this._mGrp("skins", "mdi:palette", "Skins", (this.cfg?.skins || []).length ? `${this.cfg.skins.length} eigene` : "nur eingebaute", `${this._skinHtml()}`, false)}`;
   }
   // Display-Inhalt (240 x 320 wie die Remote) auf die Groesse des Displayfensters skalieren
   _rmSkala() {
@@ -1342,6 +1362,7 @@ class EsphomeremoteKonfigurator extends HTMLElement {
     } else if (st.t === "int") {
       body = `<select data-f="fn" ${id}>${INT_FNS.map(([v, l]) => `<option value="${v}" ${st.fn === v ? "selected" : ""} ${["voice_ptt", "announce"].includes(v) && g !== "long" ? "disabled" : ""}>${esc(l)}</option>`).join("")}</select>
         ${st.fn === "activity" ? `<select data-f="arg" ${id}>${this.cfg.activities.map((a, j) => `<option value="${j}" ${st.arg === j ? "selected" : ""}>${esc(a.name)}</option>`).join("")}</select>` : ""}
+        ${st.fn === "skin" ? `<select data-f="arg" ${id}>${this._skinOptionen().map(([n, l]) => `<option value="${n}" ${st.arg === n ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` : ""}
         ${st.fn === "popup_open" ? `<select data-f="page" ${id}>${(this.cfg.menu?.pages || []).map((pg) => `<option value="${esc(pg.id)}" ${st.page === pg.id ? "selected" : ""}>${esc(pg.title || pg.id)}${pg.popup ? " (Popup)" : ""}</option>`).join("")}${M_INHALTE.filter(([k]) => !(this.cfg.menu?.pages || []).some((pg) => pg.popup && pg.inhalt === k))
             .map(([k, l]) => `<option value="__neu_${k}">+ ${esc(l)} als Popup anlegen</option>`).join("")}</select>
           <small class="note">Zeigt die Seite sofort als Popup (weckt das Display). Schließen mit X/Zurück, die Menütaste legt es weg.</small>` : ""}`;
@@ -1761,6 +1782,22 @@ class EsphomeremoteKonfigurator extends HTMLElement {
         break;
       }
       case "akzentweg": delete this.cfg.akzent; this._touch(); break;
+      case "skin_neu": {   // Skins (2026-11-19)
+        const b = this.s.skinBasis || 0;
+        const [bn, bf] = SKINS_FEST[b] || SKINS_FEST[0];
+        const sk = (this.cfg.skins ||= []);
+        const f = Object.keys(bf).length ? bf : SKIN_STANDARD;
+        sk.push({ name: `Mein ${bn}`.slice(0, 24), ...f });
+        this._touch(); break;
+      }
+      case "skin_weg": {
+        const i = Number(t.dataset.i), sk = this.cfg.skins || [];
+        if (!confirm(`Skin „${sk[i]?.name || ""}“ löschen? Remotes, die ihn nutzen, gehen auf Standard (eigene Skins danach rücken eine Nummer auf).`)) break;
+        sk.splice(i, 1);
+        if (!sk.length) delete this.cfg.skins;
+        this._touch(); break;
+      }
+      case "skin_fweg": { const s2 = this.cfg.skins?.[Number(t.dataset.i)]; if (s2) delete s2[t.dataset.k]; this._touch(); break; }
       case "akzentsetz": if (t.dataset.c === "#3B82F6") delete this.cfg.akzent; else this.cfg.akzent = t.dataset.c; this._touch(); break;
       case "rfweg": { const r = this.cfg.rfarben || {}; delete r[t.dataset.k]; if (!Object.keys(r).length) delete this.cfg.rfarben; this._touch(); break; }
       case "key": s.key = Number(t.dataset.k); break;
@@ -2109,6 +2146,16 @@ class EsphomeremoteKonfigurator extends HTMLElement {
       if (!Object.keys(e).length) delete this.cfg.eingabe;
       this._touch(); return this._render();
     }
+    if (t.dataset.skinbasis) { this.s.skinBasis = Number(t.value); return; }
+    if (t.dataset.skin !== undefined && t.dataset.sk) {   // Skins (2026-11-19)
+      const s2 = this.cfg.skins?.[Number(t.dataset.skin)], k = t.dataset.sk;
+      if (!s2) return;
+      if (k === "name") s2.name = t.value.trim().slice(0, 24);
+      else if (k === "bild" || k === "ueberall") { if (t.checked) s2[k] = true; else delete s2[k]; if (k === "bild" && t.checked && s2.dimmen === undefined) s2.dimmen = 40; }
+      else if (k === "dimmen") s2.dimmen = Math.max(0, Math.min(90, Number(t.value) || 0));
+      else s2[k] = t.value.toUpperCase();
+      this._touch(); return this._render();
+    }
     if (t.dataset.akzent) {   // Akzentfarbe der Remote (2026-11-01)
       const c = t.value.toUpperCase();
       if (c === "#3B82F6") delete this.cfg.akzent; else this.cfg.akzent = c;
@@ -2215,7 +2262,7 @@ class EsphomeremoteKonfigurator extends HTMLElement {
         st.data = d;
         break;
       }
-      case "fn": st.fn = v; if (v === "activity") st.arg = 0; else delete st.arg;
+      case "fn": st.fn = v; if (v === "activity" || v === "skin") st.arg = 0; else delete st.arg;
         if (v === "popup_open") st.page = st.page || (this.cfg.menu?.pages || []).find((pg) => pg.popup)?.id || this.cfg.menu?.pages?.[0]?.id || ""; else delete st.page;
         break;
       case "page": st.page = v.startsWith("__neu_") ? this._popupInhalt(v.slice(6)) : v; break;
@@ -6535,6 +6582,8 @@ const EINST_GRUPPEN = [
   ["Anzeige", "mdi:monitor-dashboard", [
     ["sprache", "Sprache des Displays", [[0, "Wie Home Assistant"], [1, "Deutsch"], [2, "English"]],
       "Sprache der Texte auf dem Display dieser Remote. „Wie Home Assistant“ folgt der Systemsprache von HA (Deutsch, sonst Englisch). Gilt nur für diese Remote und läuft im Abgleich nicht mit. Deine eigenen Namen bleiben, wie sie sind. Die Remote startet nach dem Umstellen kurz neu."],
+    ["skin_nr", "Skin", [[0, "Standard"]],
+      "Farbschema dieser Remote: Hintergrund, Karten, Text, Akzent – auch helle Skins. Wirkt sofort, ohne Neustart. Eigene Skins (mit Hintergrundbild von der SD-Karte) legst du unten bei „Skins“ an. An der Remote wechselst du mit einer Taste oder Menü-Kachel „Skin wechseln“. Gilt nur für diese Remote und läuft im Abgleich nicht mit."],
     ["linkshaender", "Linkshänder", null,
       "Spiegelt Touchpad (Scroll-Streifen links, untere Knöpfe getauscht) und Ziffernblock (OK links). Gilt nur für diese Remote und läuft im Abgleich nicht mit – so können Links- und Rechtshänder dieselbe Belegung teilen. Feineinstellung im Menü-Editor beim Touchpad- bzw. Ziffern-Popup."],
     ["x_rechts", "X-Knopf rechts", null,
@@ -7325,6 +7374,36 @@ const EinstTab = {
   },
   // Akzentfarbe der Remote (cfg.akzent): bei Tasten (unter dem Remote-Bild) und unter Einstellungen › Anzeige (2026-11-01,
   // Nutzer: "wo kann ich die Akzentfarbe einstellen ... gesamt irgendwo")
+  // Skins (2026-11-19): [[skin_nr, Name]] wie in der Firmware (eingebaute 0-5, eigene 10+i)
+  _skinOptionen() {
+    const o = SKINS_FEST.map(([n], i) => [i, n]);
+    (this.cfg?.skins || []).slice(0, 8).forEach((sk, i) => o.push([SKIN_EIGENE_AB + i, `${sk.name || `Skin ${i + 1}`} (eigen)`]));
+    return o;
+  },
+  // Kleine Vorschau eines Skins: Hintergrund, Karte mit Text, grauer Text, Akzent-Knopf
+  _skinVorschau(f) {
+    const c = (k) => f[k] || (k === "akzent" && this.cfg?.akzent) || SKIN_STANDARD[k];
+    return `<span class="skinvs" style="background:${c("hg")}"><span style="background:${c("karte")};color:${c("text")};border-color:${c("linie")}">Aa<small style="color:${c("matt")}">12:34</small></span><i style="background:${c("akzent")}"></i><i style="background:${c("ok")}"></i><i style="background:${c("fehler")}"></i></span>`;
+  },
+  _skinHtml() {
+    const sk = this.cfg?.skins || [];
+    const eigene = sk.map((s, i) => `<div class="skinkarte">
+        <div class="inl">${this._skinVorschau(s)}<input data-skin="${i}" data-sk="name" value="${esc(s.name || "")}" maxlength="24" placeholder="Name">
+          <small class="note">Nr. ${SKIN_EIGENE_AB + i}</small><span class="grow"></span>
+          <button class="icon sm" data-a="skin_weg" data-i="${i}" title="Skin löschen"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div>
+        <div class="lsfarben">${SKIN_KEYS.map(([k, n]) => `<label class="farbe"><input type="color" data-skin="${i}" data-sk="${k}" value="${esc((s[k] || (k === "akzent" && this.cfg?.akzent) || SKIN_STANDARD[k]).toLowerCase())}"><span>${n}</span>${s[k] ? `<button class="icon sm" data-a="skin_fweg" data-i="${i}" data-k="${k}" title="Standard (bzw. gemischt)"><ha-icon icon="mdi:close"></ha-icon></button>` : ""}</label>`).join("")}</div>
+        <div class="inl"><label class="sw small"><input type="checkbox" data-skin="${i}" data-sk="bild" ${s.bild ? "checked" : ""}><span>Hintergrundbild</span></label>
+          ${s.bild ? `<label>abdunkeln <input type="number" data-skin="${i}" data-sk="dimmen" min="0" max="90" step="5" value="${s.dimmen ?? 40}"> %</label>
+          <label class="sw small"><input type="checkbox" data-skin="${i}" data-sk="ueberall" ${s.ueberall ? "checked" : ""}><span>auf allen Seiten</span></label>` : ""}</div>
+        ${s.bild ? `<small class="note">Bild auf die SD-Karte der Remote: <code>/themes/${esc(skinSlug(s.name))}/background.rle</code> (240 × 320, erzeugt mit <code>tools/make_skin_wallpaper.py</code>) oder <code>background.rgb565</code> (roh, wie OpenRemote). Hochladen: Einstellungen › Wartung › SD-Karte › Konfig-Modus.</small>` : ""}
+      </div>`).join("");
+    return `<div class="skins">
+        <div class="lsfarben">${SKINS_FEST.map(([n, f]) => `<span class="skinfest" title="eingebaut">${this._skinVorschau(f)}<small>${n}</small></span>`).join("")}</div>
+        ${eigene}
+        ${sk.length < 8 ? `<div class="inl"><select data-skinbasis="1">${SKINS_FEST.map(([n], i) => `<option value="${i}" ${(this.s.skinBasis || 0) === i ? "selected" : ""}>auf Basis von ${esc(n)}</option>`).join("")}</select>
+          <button class="btn small" data-a="skin_neu"><ha-icon icon="mdi:plus"></ha-icon>Neuer Skin</button></div>` : ""}
+        <small class="note">Ein Skin färbt die ganze Oberfläche um (auch hell). Fehlende Farben werden aus den anderen gemischt; ohne eigenen Akzent gilt die Akzentfarbe oben. Auswahl je Remote: Einstellungen › Anzeige › Skin, die Auswahl „Skin“ in Home Assistant oder eine Taste/Kachel „Skin wechseln“. „Speichern“ überträgt neue oder geänderte Skins.</small></div>`;
+  },
   _akzentHtml() {
     return `
         <div class="lsfarben"><label class="farbe"><input type="color" data-akzent="1" value="${esc((this.cfg?.akzent || "#3B82F6").toLowerCase())}"><span>Akzent</span>${this.cfg?.akzent ? `<button class="icon sm" data-a="akzentweg" title="Zurück zu Blau"><ha-icon icon="mdi:close"></ha-icon></button>` : ""}</label>
@@ -7347,6 +7426,7 @@ const EinstTab = {
     const iBtn = (hk) => `<button class="ehbtn ${hAlle || hAuf.has(hk) ? "auf" : ""}" data-a="ehilfe" data-hk="${esc(hk)}" title="Erklärung"><ha-icon icon="mdi:information-outline"></ha-icon></button>`;
     const zeile = this._einstZeile = ([k, name, art, hilfe, tag]) => {
       if (!sichtbar([k, name, art, hilfe, tag])) return "";
+      if (k === "skin_nr") art = this._skinOptionen();   // eingebaute + eigene Skins (2026-11-19)
       const v = w[k];
       let ctl;
       if (Array.isArray(art)) {
@@ -7366,7 +7446,8 @@ const EinstTab = {
       const feinHtml = fein ? `<details class="efein"><summary><ha-icon icon="mdi:tune"></ha-icon>Feineinstellungen</summary>${fein}</details>` : "";
       const wlanHinweis = titel === "Energie" && w.nur_ble !== false
         ? `<p class="ehilfe">WLAN-Optionen erscheinen nur bei der Verbindungsart „Nur WLAN“ – im Dock-Betrieb ist das WLAN ohnehin aus und kommt nur bei Bedarf.</p>` : "";
-      const akz = titel === "Anzeige" ? `<div class="ez"><span>Akzentfarbe <small>(ganze Remote · mit „Speichern“)</small></span></div>${this._akzentHtml()}` : "";
+      const akz = titel === "Anzeige" ? `<div class="ez"><span>Akzentfarbe <small>(ganze Remote · mit „Speichern“)</small></span></div>${this._akzentHtml()}
+        <div class="ez"><span>Skins <small>(eigene Farbschemas · mit „Speichern“)</small></span></div>${this._skinHtml()}` : "";
       return z || fein ? `<div class="karte"><h3><ha-icon icon="${icon}"></ha-icon>${titel}${intro ? iBtn("intro:" + titel) : ""}</h3>${intro ? `<div class="eintro ${hAlle || hAuf.has("intro:" + titel) ? "auf" : ""}" data-hk="${esc("intro:" + titel)}">${intro}</div>` : ""}${akz}${z}${wlanHinweis}${feinHtml}</div>` : "";
     }).join("") + this._begruessungHtml(zeile);
     const zeit = m.einst_at ? new Date(m.einst_at).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) : "–";

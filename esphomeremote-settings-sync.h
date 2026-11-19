@@ -61,6 +61,15 @@ inline void einrichten() {
     const bool neu = v == 2 || (v == 0 && strcmp(tk_cfg->wurzel()["sprache"] | "de", "de") != 0);
     if (neu != vorher) App.scheduler.set_timeout(tk_cfg, "neustart", 3000, []() { global_preferences->sync(); App.safe_reboot(); });
   });
+  // Skin (2026-11-19, esphomeremote-skin.h): 0-5 eingebaut, 10+i eigener Skin i. Wirkt sofort, ohne Neustart.
+  // Laeuft im Abgleich nicht mit (je Remote/Person, wie die Sprache).
+  t->einst_feld("skin_nr", false, []() { return (int) skin_nr->value(); }, [](int v) {
+    if (!skin::gueltig(v, tk_cfg->wurzel())) v = 0;
+    if (skin_nr->value() == v) return;
+    skin_nr->value() = v;
+    skin::bild_fehlt().clear();
+    akzent_anwenden->execute();
+  });
 #undef EINST_B
 #undef EINST_I
   // Nur Bluetooth (WLAN aus): liegt im HA-Link (ha_tunnel), nicht in einem global

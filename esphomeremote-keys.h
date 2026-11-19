@@ -656,6 +656,19 @@ inline void dock_anim(uint32_t verz = 0) {
 }
 
 inline void seite_zeigen(lvgl::LvPageType *seite, lv_screen_load_anim_t anim);
+// Skin wechseln (2026-11-19, esphomeremote-skin.h): merken, anwenden, Hintergrundbild pruefen, Namen kurz zeigen.
+// Die Einstellung skin_nr meldet der Abgleich von selbst an den Konfigurator.
+inline void modus_anzeige(const char *name, uint32_t ms);
+inline void skin_waehlen(int nr) {
+  if (!skin::gueltig(nr, tk_cfg->wurzel())) nr = 0;
+  if (nr != skin_nr->value()) {
+    skin_nr->value() = nr;
+    skin::bild_fehlt().clear();
+    akzent_anwenden->execute();
+  }
+  modus_anzeige(skin::aufloesen(nr, tk_cfg->wurzel()).name.c_str(), 1500);
+}
+
 inline void intern(const char *fn, int arg, const Ctx &c) {
   const bool d = c.dunkel;
   // Einstellung "Menütaste bei dunklem Display: Nur Display" (2026-10-11): der weckende Druck oeffnet kein Menue
@@ -679,6 +692,8 @@ inline void intern(const char *fn, int arg, const Ctx &c) {
   else if (!strcmp(fn, "activity_off")) aktivitaet_aus();
   else if (!strcmp(fn, "keyboard")) kbd_popup_zeigen->execute();
   else if (!strcmp(fn, "kbd_light")) toggle_kbd_light->execute();
+  else if (!strcmp(fn, "skin_next")) skin_waehlen(skin::naechster(skin_nr->value(), tk_cfg->wurzel()));
+  else if (!strcmp(fn, "skin")) skin_waehlen(arg);
   else if (!strcmp(fn, "mic_toggle")) toggle_mic->execute();
   else if (!strcmp(fn, "clean")) clean_run->execute();
   else if (!strcmp(fn, "power_off")) herunterfahren->execute();
@@ -1099,6 +1114,8 @@ inline void einrichten() {
     akzent_anwenden->execute();   // vor dem Neuaufbau: neue Teile holen akzent::farbe()
     apply_activity->execute();
     apply_home_layout->execute();
+    skin::auffrischen(lv_screen_active());   // eben neu gebaute Teile tragen noch Standardfarben (2026-11-19)
+    skin::auffrischen(lv_layer_top());
     tv_knopf_pruefen->execute();   // Verknuepfung "tv" kann sich geaendert haben
   });
   t->darf_laden = []() {

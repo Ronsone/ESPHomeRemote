@@ -71,6 +71,7 @@ esphome:
     - esphomeremote-input.h
     - esphomeremote-settings.h   # Einstellungen fuers Konfigurator-Menue (generiert, 2026-10-04)
     - esphomeremote-accent.h   # Akzentfarbe aus dem Konfigurator (2026-11-01)
+    - esphomeremote-skin.h   # Skins: ganzes Farbpalett + Hintergrundbild, umschaltbar (2026-11-19)
     - esphomeremote-keys.h   # Tasten-Konfigurator (2026-10-03)
     - esphomeremote-wifi.h
     - esphomeremote-durchsage.h   # Durchsage per WLAN ohne Bluetooth-Schicht (2026-11-09)
@@ -1575,6 +1576,7 @@ globals:
   - {id: x_rechts,       type: bool,      restore_value: true,  initial_value: "false"}
   # Sprache des Displays (2026-11-01): 0 = wie Home Assistant, 1 = Deutsch, 2 = Englisch; sprache_ha_en = HA ist nicht Deutsch
   - {id: sprache_wahl,   type: int,       restore_value: true,  initial_value: "0"}
+  - {id: skin_nr,        type: int,       restore_value: true,  initial_value: "0"}   # Skin (esphomeremote-skin.h): 0-5 eingebaut, 10+ eigene
   - {id: sprache_ha_en,  type: bool,      restore_value: true,  initial_value: "false"}   # X-Knopf rechts (2026-11-01): Seitenkoepfe gespiegelt, Animationen andersherum
   - {id: gesten_sens,    type: int,       restore_value: true,  initial_value: "1"}
   - {id: home_aus_menue, type: bool,      restore_value: false, initial_value: "false"}
@@ -4071,8 +4073,54 @@ script:
             id(page_musik)->obj, id(page_maus)->obj, id(page_sd)->obj, id(page_ota)->obj, id(page_clean)->obj,
             id(page_touch_test)->obj, id(page_button_test)->obj};
           const std::vector<lv_style_t *> stile = {id(st_screen), id(st_title), id(st_tile), id(st_tile2), id(st_ctrlbtn), id(st_back), id(st_muted)};
-          akzent::anwenden(akzent::aus_text(id(tk_cfg).wurzel()["akzent"] | ""), seiten, stile);
+          // Skin (2026-11-19): ganzes Palett statt nur des Akzents - der Akzent des Konfigurators gilt, wenn der Skin
+          // keinen eigenen hat (esphomeremote-skin.h)
+          const auto wahl = skin::aufloesen(id(skin_nr), id(tk_cfg).wurzel());
+          skin::anwenden(wahl.pal, skin::farbe_aus(id(tk_cfg).wurzel()["akzent"] | ""), seiten, stile);
+          skin::beim_seitenwechsel_einrichten(seiten);
           sprache::anwenden(seiten);   // feste Texte auf Englisch, wenn gewaehlt (2026-11-01)
+      - script.execute: skin_bild_pruefen
+  # Hintergrundbild des Skins (2026-11-19): passend zeigen, wegnehmen oder von der SD-Karte holen
+  # (/themes/<skin>/background.rle oder .rgb565, 240 x 320; tools/make_skin_wallpaper.py)
+  - id: skin_bild_pruefen
+    then:
+      - if:
+          condition:
+            lambda: |-
+              const auto w = skin::aufloesen(id(skin_nr), id(tk_cfg).wurzel());
+              return skin::bild_pruefen(w, id(page_home)->obj, id(st_screen)) == 1;
+          then:
+            - script.execute: skin_bild_holen
+  - id: skin_bild_holen
+    mode: single
+    then:
+      # Karte teilen sich Mikrofon und Cover-Logos: warten, bis sie frei ist
+      - wait_until:
+          condition: {lambda: "return !id(sd_bild_laeuft) && !id(sdkarte)->is_mounted() && !id(voice_active) && !id(host_mic) && !id(ota_aktiv);"}
+          timeout: 60s
+      - if:
+          condition: {lambda: "return !id(sd_bild_laeuft) && !id(sdkarte)->is_mounted() && !id(voice_active) && !id(host_mic) && !id(ota_aktiv);"}
+          then:
+            - lambda: 'id(sd_bild_laeuft) = true;'
+            - script.execute: sd_strom_an
+            - script.wait: sd_strom_an
+            - lambda: 'skin::bild_starten(id(sdkarte), skin::aufloesen(id(skin_nr), id(tk_cfg).wurzel()).slug);'
+            - wait_until:
+                condition: {lambda: "return !skin::busy();"}
+                timeout: 45s
+            - lambda: 'if (id(sdkarte)->is_mounted()) id(sdkarte)->unmount();'
+            - switch.turn_on: sd_power_off
+            - delay: 200ms
+            - lambda: |-
+                id(voice)->set_mic_blocked(false);
+                id(sd_bild_laeuft) = false;
+            - script.execute: apply_mic_power
+            - lambda: |-
+                if (skin::busy()) { ESP_LOGW("skin", "Hintergrundbild: Zeitueberschreitung beim Lesen"); return; }
+                const auto w = skin::aufloesen(id(skin_nr), id(tk_cfg).wurzel());
+                if (!w.bild) return;   // inzwischen umgeschaltet
+                if (!skin::bild_uebernehmen(w, id(page_home)->obj, id(st_screen)))
+                  ESP_LOGW("skin", "Kein Hintergrundbild auf der SD-Karte: /themes/%s/background.rle bzw. .rgb565", w.slug.c_str());
   # eigene Anordnung aus dem Konfigurator (tasten::startseite_anwenden) und die Aktivitaetsleiste.
   - id: apply_home_layout
     then:
