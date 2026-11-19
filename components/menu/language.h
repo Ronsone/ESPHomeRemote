@@ -13,16 +13,24 @@
 
 namespace sprache {
 
+// englisch(): eine Uebersetzung ist aktiv (Display nicht Deutsch). Welche Tabelle: niederlaendisch() (2026-11-20) -
+// sonst Englisch. Datumsformat ohne "." nach dem Tag gilt fuer beide.
 inline bool &englisch() { static bool e = false; return e; }
+inline bool &niederlaendisch() { static bool n = false; return n; }
+inline const Paar *tab_() { return niederlaendisch() ? TAB_NL : TAB_EN; }
+inline unsigned tab_n_() { return niederlaendisch() ? TAB_NL_N : TAB_EN_N; }
+inline const unsigned short *teil_() { return niederlaendisch() ? TEIL_NL : TEIL_EN; }
+inline unsigned teil_n_() { return niederlaendisch() ? TEIL_NL_N : TEIL_EN_N; }
 
 // Exakter Treffer (binaere Suche nach Bytes), sonst unveraendert
 inline const char *tr(const char *s) {
   if (!englisch() || s == nullptr || *s == 0) return s;
-  unsigned lo = 0, hi = TAB_EN_N;
+  const Paar *tab = tab_();
+  unsigned lo = 0, hi = tab_n_();
   while (lo < hi) {
     const unsigned m = (lo + hi) / 2;
-    const int c = strcmp(TAB_EN[m].de, s);
-    if (c == 0) return TAB_EN[m].en;
+    const int c = strcmp(tab[m].de, s);
+    if (c == 0) return tab[m].en;
     if (c < 0) lo = m + 1; else hi = m;
   }
   return s;
@@ -39,8 +47,10 @@ inline std::string teile(const char *s) {
   std::vector<int8_t> belegt(n, 0);
   struct T { size_t a, l; unsigned i; };
   std::vector<T> treffer;
-  for (unsigned k = 0; k < TEIL_EN_N; k++) {
-    const Paar &p = TAB_EN[TEIL_EN[k]];
+  const Paar *tab = tab_();
+  const unsigned short *teil = teil_();
+  for (unsigned k = 0; k < teil_n_(); k++) {
+    const Paar &p = tab[teil[k]];
     const size_t l = strlen(p.de);
     if (l > n) continue;
     for (const char *f = strstr(s, p.de); f != nullptr; f = strstr(f + 1, p.de)) {
@@ -50,14 +60,14 @@ inline std::string teile(const char *s) {
       for (size_t j = a; j < a + l; j++) if (belegt[j]) { frei = false; break; }
       if (!frei) continue;
       for (size_t j = a; j < a + l; j++) belegt[j] = 1;
-      treffer.push_back({a, l, TEIL_EN[k]});
+      treffer.push_back({a, l, teil[k]});
     }
   }
   std::string out;
   if (!treffer.empty()) {
     std::sort(treffer.begin(), treffer.end(), [](const T &x, const T &y) { return x.a < y.a; });
     size_t i = 0;
-    for (auto &t : treffer) { out.append(s + i, t.a - i); out += TAB_EN[t.i].en; i = t.a + t.l; }
+    for (auto &t : treffer) { out.append(s + i, t.a - i); out += tab[t.i].en; i = t.a + t.l; }
     out.append(s + i);
   } else {
     out = s;

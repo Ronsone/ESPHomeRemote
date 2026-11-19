@@ -51,15 +51,17 @@ inline void einrichten() {
     if (millis() < 30000) return;   // beim Start nur uebernehmen
     App.scheduler.set_timeout(tk_cfg, "neustart", 3000, []() { global_preferences->sync(); App.safe_reboot(); });
   });
-  // Sprache des Displays (2026-11-01): 0 wie HA, 1 Deutsch, 2 Englisch - die Seiten werden einmal aufgebaut, darum
-  // nach einer Aenderung kurz neu starten. Laeuft im Abgleich nicht mit (je Person).
+  // Sprache des Displays (2026-11-01): 0 wie HA, 1 Deutsch, 2 Englisch, 3 Niederlaendisch (2026-11-20) - die Seiten
+  // werden einmal aufgebaut, darum nach einer Aenderung kurz neu starten. Laeuft im Abgleich nicht mit (je Person).
   t->einst_feld("sprache", false, []() { return (int) sprache_wahl->value(); }, [](int v) {
-    v = v < 0 || v > 2 ? 0 : v;
+    v = v < 0 || v > 3 ? 0 : v;
     if (sprache_wahl->value() == v) return;
-    const bool vorher = sprache::englisch();
+    const bool vorher_en = sprache::englisch(), vorher_nl = sprache::niederlaendisch();
     sprache_wahl->value() = v;
-    const bool neu = v == 2 || (v == 0 && strcmp(tk_cfg->wurzel()["sprache"] | "de", "de") != 0);
-    if (neu != vorher) App.scheduler.set_timeout(tk_cfg, "neustart", 3000, []() { global_preferences->sync(); App.safe_reboot(); });
+    const bool ha_nl = strncmp(tk_cfg->wurzel()["sprache_ha"] | "", "nl", 2) == 0;
+    const bool neu_en = v >= 2 || (v == 0 && strcmp(tk_cfg->wurzel()["sprache"] | "de", "de") != 0);
+    const bool neu_nl = v == 3 || (v == 0 && ha_nl);
+    if (neu_en != vorher_en || neu_nl != vorher_nl) App.scheduler.set_timeout(tk_cfg, "neustart", 3000, []() { global_preferences->sync(); App.safe_reboot(); });
   });
   // Skin (2026-11-19, esphomeremote-skin.h): 0-5 eingebaut, 10+i eigener Skin i. Wirkt sofort, ohne Neustart.
   // Laeuft im Abgleich nicht mit (je Remote/Person, wie die Sprache).

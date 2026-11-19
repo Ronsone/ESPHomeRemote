@@ -3689,5 +3689,6 @@
  "auf allen Seiten": "on all pages",
  "eigene": "custom",
  "eingebaut": "built-in",
- "nur eingebaute": "built-in only"
+ "nur eingebaute": "built-in only",
+ "Sprache der Texte auf dem Display dieser Remote. „Wie Home Assistant“ folgt der Systemsprache von HA (Deutsch, Niederländisch, sonst Englisch). Gilt nur für diese Remote und läuft im Abgleich nicht mit. Deine eigenen Namen bleiben, wie sie sind. Die Remote startet nach dem Umstellen kurz neu.": "Language of the texts on this remote's display. “Like Home Assistant” follows HA's system language (German, Dutch, otherwise English). Applies only to this remote and is not synced. Your own names stay as they are. The remote restarts briefly after switching."
 }

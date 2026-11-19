@@ -1033,6 +1033,8 @@ class KonfigData:
         from .i18n import sprache as ha_sprache
 
         cfg["sprache"] = ha_sprache(self.hass)
+        # Genaue HA-Sprache (2026-11-20): die Remote zeigt bei "nl" Niederlaendisch (sonst Englisch/Deutsch wie oben)
+        cfg["sprache_ha"] = str(getattr(self.hass.config, "language", "") or "")[:8].lower()
         return device_payload(cfg)
 
     def dock_macs(self) -> dict:

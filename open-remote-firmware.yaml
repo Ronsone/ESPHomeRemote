@@ -521,10 +521,13 @@ esphome:
         # verloren, die Konfiguration nicht - Remote 2 blieb dadurch auf Englisch haengen)
         - lambda: |-
             JsonVariantConst w = id(tk_cfg).wurzel()["einst"]["sprache"][0];
-            if (w.is<int>() && w.as<int>() >= 0 && w.as<int>() <= 2) id(sprache_wahl) = w.as<int>();
+            if (w.is<int>() && w.as<int>() >= 0 && w.as<int>() <= 3) id(sprache_wahl) = w.as<int>();
             id(sprache_ha_en) = strcmp(id(tk_cfg).wurzel()["sprache"] | "de", "de") != 0;
-            sprache::englisch() = id(sprache_wahl) == 2 || (id(sprache_wahl) == 0 && id(sprache_ha_en));
-            ESP_LOGI("sprache", "Sprache: Wahl %d, HA %s -> %s", id(sprache_wahl), id(sprache_ha_en) ? "en" : "de", sprache::englisch() ? "Englisch" : "Deutsch");
+            id(sprache_ha_nl) = strncmp(id(tk_cfg).wurzel()["sprache_ha"] | "", "nl", 2) == 0;   // Niederlaendisch (2026-11-20)
+            sprache::englisch() = id(sprache_wahl) >= 2 || (id(sprache_wahl) == 0 && id(sprache_ha_en));
+            sprache::niederlaendisch() = id(sprache_wahl) == 3 || (id(sprache_wahl) == 0 && id(sprache_ha_nl));
+            ESP_LOGI("sprache", "Sprache: Wahl %d, HA %s -> %s", id(sprache_wahl), id(sprache_ha_nl) ? "nl" : id(sprache_ha_en) ? "en" : "de",
+                     sprache::niederlaendisch() ? "Niederlaendisch" : sprache::englisch() ? "Englisch" : "Deutsch");
         - script.execute: akzent_anwenden
         - lambda: 'id(mn)->set_spiegel(id(x_rechts)); touchpad::menue_anbinden();'   # X-Knopf rechts; Touchpad-Teile im Menue
         # Log-Ausfuehrlichkeit aus der Einstellung (Standard INFO).
@@ -1579,6 +1582,7 @@ globals:
   # Sprache des Displays (2026-11-01): 0 = wie Home Assistant, 1 = Deutsch, 2 = Englisch; sprache_ha_en = HA ist nicht Deutsch
   - {id: sprache_wahl,   type: int,       restore_value: true,  initial_value: "0"}
   - {id: skin_nr,        type: int,       restore_value: true,  initial_value: "0"}   # Skin (esphomeremote-skin.h): 0-5 eingebaut, 10+ eigene
+  - {id: sprache_ha_nl,  type: bool,      restore_value: true,  initial_value: "false"}   # HA ist Niederlaendisch (2026-11-20)
   - {id: sprache_ha_en,  type: bool,      restore_value: true,  initial_value: "false"}   # X-Knopf rechts (2026-11-01): Seitenkoepfe gespiegelt, Animationen andersherum
   - {id: gesten_sens,    type: int,       restore_value: true,  initial_value: "1"}
   - {id: home_aus_menue, type: bool,      restore_value: false, initial_value: "false"}

@@ -1103,10 +1103,12 @@ inline void einrichten() {
     // Sprache von HA (2026-11-01): aendert sie sich und gilt "wie HA", einmal neu starten (Seiten werden einmal gebaut)
     {
       const bool en = strcmp(tk_cfg->wurzel()["sprache"] | "de", "de") != 0;
-      if (en != sprache_ha_en->value()) {
+      const bool nl = strncmp(tk_cfg->wurzel()["sprache_ha"] | "", "nl", 2) == 0;   // Niederlaendisch (2026-11-20)
+      if (en != sprache_ha_en->value() || nl != sprache_ha_nl->value()) {
         sprache_ha_en->value() = en;
-        if (sprache_wahl->value() == 0 && en != sprache::englisch()) {
-          ESP_LOGI("sprache", "Sprache von HA: %s - Neustart", en ? "en" : "de");
+        sprache_ha_nl->value() = nl;
+        if (sprache_wahl->value() == 0 && (en != sprache::englisch() || nl != sprache::niederlaendisch())) {
+          ESP_LOGI("sprache", "Sprache von HA: %s - Neustart", nl ? "nl" : en ? "en" : "de");
           App.scheduler.set_timeout(tk_cfg, "neustart", 3000, []() { global_preferences->sync(); App.safe_reboot(); });
         }
       }

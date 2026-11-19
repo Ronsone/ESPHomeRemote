@@ -6580,8 +6580,8 @@ const EINST_GRUPPEN = [
       "Helligkeit im abgedunkelten Zustand, bezogen auf die normale Helligkeit."],
   ], "<b>Die Stufen der Remote:</b> <b>Hell</b> → nach „Abdunkeln nach“ <b>abgedunkelt</b> → nach „Display aus nach“ <b>Ruhezustand</b> (Display aus, der Chip läuft weiter, Bluetooth zum Fernseher bleibt verbunden, jede Taste wirkt sofort) → nach „Tiefschlaf nach“ <b>Tiefschlaf</b> (Chip fast ganz aus, Akku hält Wochen; Wecken = Neustart – Tasten übers Dock wirken ab Firmware 2026.11.5.4 nach ca. 0,2–0,7 s, alles andere nach ca. 1–2 s)."],
   ["Anzeige", "mdi:monitor-dashboard", [
-    ["sprache", "Sprache des Displays", [[0, "Wie Home Assistant"], [1, "Deutsch"], [2, "English"]],
-      "Sprache der Texte auf dem Display dieser Remote. „Wie Home Assistant“ folgt der Systemsprache von HA (Deutsch, sonst Englisch). Gilt nur für diese Remote und läuft im Abgleich nicht mit. Deine eigenen Namen bleiben, wie sie sind. Die Remote startet nach dem Umstellen kurz neu."],
+    ["sprache", "Sprache des Displays", [[0, "Wie Home Assistant"], [1, "Deutsch"], [2, "English"], [3, "Nederlands"]],
+      "Sprache der Texte auf dem Display dieser Remote. „Wie Home Assistant“ folgt der Systemsprache von HA (Deutsch, Niederländisch, sonst Englisch). Gilt nur für diese Remote und läuft im Abgleich nicht mit. Deine eigenen Namen bleiben, wie sie sind. Die Remote startet nach dem Umstellen kurz neu."],
     ["skin_nr", "Skin", [[0, "Standard"]],
       "Farbschema dieser Remote: Hintergrund, Karten, Text, Akzent – auch helle Skins. Wirkt sofort, ohne Neustart. Eigene Skins (mit Hintergrundbild von der SD-Karte) legst du unten bei „Skins“ an. An der Remote wechselst du mit einer Taste oder Menü-Kachel „Skin wechseln“. Gilt nur für diese Remote und läuft im Abgleich nicht mit."],
     ["linkshaender", "Linkshänder", null,
