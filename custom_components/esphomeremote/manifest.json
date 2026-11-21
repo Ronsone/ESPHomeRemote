@@ -1,6 +1,6 @@
 {
   "domain": "esphomeremote",
-  "name": "ESPHomeRemote",
+  "name": "ESPHomeRemote NOIR",
   "after_dependencies": [
     "assist_pipeline",
     "bluetooth",
