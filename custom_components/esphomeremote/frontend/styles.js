@@ -474,6 +474,20 @@ ha-icon { --mdc-icon-size:20px; }
 .rsleiste span[data-ai], .lsvor span[data-ai] { cursor:grab; touch-action:none; } .rsleiste span.zieht, .lsvor span.zieht { opacity:.5; }
 .rsleiste span.ziel, .lsvor span.ziel { box-shadow:inset 0 0 0 2px #fff; }
 .lsfarben { display:flex; flex-wrap:wrap; gap:6px 12px; margin-bottom:8px; }
+.noirb { display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; padding:8px 4px; } .noirbt { flex:1 1 360px; max-width:640px; }
+.noirhilfe li { margin:6px 0; line-height:1.45; }
+.noirv { position:relative; width:240px; height:320px; background:radial-gradient(120% 90% at 85% 15%, #2a2c31 0%, #0b0c0f 45%, #07080a 100%); border-radius:10px; overflow:hidden; color:#f2f3f5; font-family:Inter,Roboto,sans-serif; box-shadow:0 0 0 8px #15171b, 0 6px 24px rgba(0,0,0,.5); margin:8px; }
+.noirv .nvbar { position:absolute; left:12px; right:12px; top:5px; display:flex; font-size:12px; color:#b6bac3; } .noirv .nvbar i { font-style:normal; }
+.noirv .nvbody { position:absolute; left:12px; top:30px; width:216px; height:236px; overflow-y:auto; overflow-x:hidden; }
+.noirv .nvt { position:absolute; left:0; top:5px; font-size:16px; font-weight:500; } .noirv .nvs { position:absolute; left:0; top:30px; font-size:12px; color:#969aa3; }
+.noirv .nvk { position:absolute; box-sizing:border-box; background:linear-gradient(#1a1c20,#101114); border:1px solid rgba(56,60,67,.45); border-radius:13px; display:flex; align-items:center; gap:7px; padding:0 10px; font-size:12px; color:#e4e7ec; overflow:hidden; }
+.noirv .nvk.gross { flex-direction:column; align-items:flex-start; justify-content:space-between; padding:8px 12px 7px; border-radius:16px; font-size:14px; }
+.noirv .nvk b { font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.noirv .nvk ha-icon { --mdc-icon-size:20px; opacity:.82; }
+.noirv .nvcog { left:184px; top:0; width:32px; height:32px; padding:0; justify-content:center; border-radius:11px; }
+.noirv .nvtxt { position:absolute; font-size:12px; color:#969aa3; }
+.noirv .nvfuss { position:absolute; left:12px; right:12px; top:270px; height:42px; display:flex; gap:8px; }
+.noirv .nvfuss .nvk { position:relative; flex:1; justify-content:center; background:rgba(16,18,22,.7); border-radius:14px; }
 .skinvs { display:inline-flex; align-items:center; gap:3px; padding:4px; border-radius:6px; border:1px solid var(--divider-color); flex:0 0 auto; }
 .skinvs > span { display:inline-flex; flex-direction:column; align-items:flex-start; font-size:11px; line-height:1.1; padding:2px 6px; border-radius:4px; border:1px solid; font-weight:600; }
 .skinvs > span small { font-size:9px; font-weight:400; } .skinvs > i { width:8px; height:18px; border-radius:3px; display:inline-block; }

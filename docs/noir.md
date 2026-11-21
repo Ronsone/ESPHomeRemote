@@ -17,6 +17,19 @@ Display, touch, toetsen (TCA8418), IR, Bluetooth, dock en Home Assistant blijven
   (wifi, Bluetooth-link of dock, met wachtrij na het wekken). In de toetsentest worden ze niet doorgestuurd.
 - **Skin NOIR** (nr. 6) voor de rest van de firmware (menu, instellingen): dezelfde grafietkleuren.
 
+## NOIR-builder: tegels van NOIR Thuis in de configurator
+
+Configurator → je remote → **NOIR**: voorbeeld in NOIR-stijl en de knop *Eigen tegels aanmaken* / *Tegels bewerken*.
+De tegels zijn de items van de menupagina **`noir`** en worden in de gewone menu-editor bewerkt (toevoegen, slepen,
+grootte, naam, icoon, stappen). Opslaan = direct op de remote, **zonder compileren**.
+
+- Raster 6 kolommen; hoogte 2 = grote tegel (icoon boven, naam onder), hoogte 1 = smalle balk. Te veel = scrollen.
+- Tik: *Actie* voert de stappen uit, *Pagina* opent een menupagina, *Ingebouwde pagina* bijv. Mediaspeler of
+  *NOIR: TV-scherm*, *Schakelaar/Licht/Rolluik* schakelt de entiteit.
+- TV zoals voorheen: Actie → Functie van de remote → *NOIR: TV-scherm (TV + KEF aan)* (`noir_tv`).
+- Iconen: alle `mdi:`-iconen uit de icoonkeuze, plus `noir:tv`, `noir:audio`, `noir:licht`, `noir:scenes`.
+- Geen pagina `noir` = de ingebouwde tegels.
+
 ## NOIR TV-scherm
 
 Tik op **TV** in NOIR Thuis:

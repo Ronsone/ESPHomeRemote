@@ -16,6 +16,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include "esphome/components/menu/mdi_icons.h"
 
 namespace noir {
 
@@ -28,7 +29,8 @@ static const uint32_t BG = 0x07080A, SURF = 0x1A1C20, SURF2 = 0x101114, SURF_DIM
 // Acties van de tegels (zelfde betekenis als action() in de simulator: 101-104 tegels, 113 instellingen, 1 Terug,
 // 100 Thuis)
 enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, SCENES = 104, AIRCO = 105, INSTELLINGEN = 113,
-                   TV_AANUIT = 120, TV_APP = 200 /* 200-205: app-tegels */ };
+                   TV_AANUIT = 120, TV_APP = 200 /* 200-205: app-tegels */,
+                   ITEM = 1000 /* 1000+i: tegel i van de configuratorpagina "noir" */ };
 
 struct Fonts { const lv_font_t *f12{nullptr}, *f14{nullptr}, *f16{nullptr}, *ico{nullptr}, *f20{nullptr}; };
 
@@ -62,6 +64,9 @@ struct Stand {
   lv_obj_t *kop{nullptr};                   // statusbalk, hangt aan de zichtbare laag
   lv_obj_t *klok{nullptr}, *batt_txt{nullptr}, *batt_fill{nullptr}, *ha_dot{nullptr};
   lv_obj_t *tv_status{nullptr};
+  lv_obj_t *thuis_body{nullptr};            // tegels van NOIR Thuis (opnieuw opgebouwd bij nieuwe configuratie)
+  Fonts fonts;                              // voor het herbouwen
+  Beelden beelden;
   int seite{S_THUIS};                       // laatst getoonde NOIR-pagina
   std::string tv_state;                     // "on", "off", "unavailable" ... (uit HA)
   bool aan{false};      // NOIR als startscherm gebruiken
@@ -245,9 +250,80 @@ inline lv_obj_t *body_maken(lv_obj_t *laag, bool scroll) {
   return body;
 }
 
+// ---- NOIR-builder (2026-11-22): tegels van NOIR Thuis uit de configurator --------------------------------------
+// Pagina met id "noir" in het menu van de configurator (cfg.menu.pages). Elke tegel = een menu-item met x/y/w/h op
+// het raster van de configurator (6 kolommen). NOIR: kolom = (216 + 8) / 6 px, rij = 31 px (h 2 = 56 px hoog).
+// icon: "mdi:naam" (fonts/mdi-subset.ttf, zie components/menu/mdi_icons.h) of "noir:tv|audio|licht|scenes" (beelden).
+// Wat een tik doet, regelt de firmware (tasten::noir_item_actie): page, special, action (steps), toggle/light/cover.
+static const int RIJ = 31, RIJ_GAT = 6, KOL_GAT = 8, TEGELS_Y = 52;
+
+inline std::string utf8_(uint32_t cp) {
+  std::string o;
+  if (cp < 0x80) o += (char) cp;
+  else if (cp < 0x800) { o += (char) (0xC0 | (cp >> 6)); o += (char) (0x80 | (cp & 0x3F)); }
+  else if (cp < 0x10000) { o += (char) (0xE0 | (cp >> 12)); o += (char) (0x80 | ((cp >> 6) & 0x3F)); o += (char) (0x80 | (cp & 0x3F)); }
+  else { o += (char) (0xF0 | (cp >> 18)); o += (char) (0x80 | ((cp >> 12) & 0x3F)); o += (char) (0x80 | ((cp >> 6) & 0x3F)); o += (char) (0x80 | (cp & 0x3F)); }
+  return o;
+}
+// "mdi:air-conditioner" -> UTF-8 van het teken in mdi_menu, "" = onbekend
+inline std::string mdi_teken(const char *icon) {
+  if (icon == nullptr || strncmp(icon, "mdi:", 4) != 0) return "";
+  for (const auto &e : esphome::menue::MDI_ICONS)
+    if (strcmp(e.name, icon + 4) == 0) return utf8_(e.cp);
+  return "";
+}
+inline const void *noir_beeld(const char *icon, const Beelden &bl) {
+  if (icon == nullptr || strncmp(icon, "noir:", 5) != 0) return nullptr;
+  const char *n = icon + 5;
+  if (!strcmp(n, "tv")) return bl.tv;
+  if (!strcmp(n, "audio")) return bl.audio;
+  if (!strcmp(n, "licht")) return bl.licht;
+  if (!strcmp(n, "scenes")) return bl.scenes;
+  return nullptr;
+}
+
+// Een tegel uit een item (JSON uit de configurator) op de NOIR-maat
+inline void item_tegel(lv_obj_t *body, JsonObjectConst it, int index, const Fonts &f, const Beelden &bl) {
+  const int x = std::max(0, std::min(5, (int) (it["x"] | 0))), w = std::max(1, std::min(6 - x, (int) (it["w"] | 6)));
+  const int y = std::max(0, (int) (it["y"] | 0)), h = std::max(1, std::min(6, (int) (it["h"] | 2)));
+  const int px = x * (216 + KOL_GAT) / 6, pw = (x + w) * (216 + KOL_GAT) / 6 - px - KOL_GAT;
+  const int py = y * RIJ, ph = h * RIJ - RIJ_GAT;
+  const char *label_t = it["label"] | "";
+  const char *icon = it["icon"] | "";
+  const std::string t = it["t"] | "";
+  if (t == "text") {   // alleen tekst (kop/uitleg)
+    lv_obj_t *l = label(body, label_t, px, py + 4, pw, h >= 2 ? f.f16 : f.f12, h >= 2 ? TEXT : MUTED);
+    lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
+    return;
+  }
+  const void *beeld = noir_beeld(icon, bl);
+  const std::string teken = beeld == nullptr ? mdi_teken(icon) : std::string();
+  if (ph >= 46) {   // groot: icoon linksboven, naam linksonder (zoals de simulator)
+    tegel(body, label_t, px, py, ITEM + index, beeld, f, pw, ph, teken.empty() ? nullptr : teken.c_str());
+    return;
+  }
+  // klein (1 rij): icoon en naam naast elkaar
+  lv_obj_t *b = knop(body, px, py, pw, ph, ITEM + index);
+  int lx = 10;
+  if (beeld != nullptr || !teken.empty()) {
+    lv_obj_t *i;
+    if (beeld != nullptr) { i = lv_image_create(b); lv_image_set_src(i, beeld); lv_image_set_scale(i, 180); }
+    else { i = lv_label_create(b); lv_label_set_text(i, teken.c_str()); if (f.ico != nullptr) lv_obj_set_style_text_font(i, f.ico, 0);
+           lv_obj_set_style_text_color(i, k(TEXT2), 0); }
+    lv_obj_align(i, LV_ALIGN_LEFT_MID, 8, 0);
+    lv_obj_remove_flag(i, LV_OBJ_FLAG_CLICKABLE);
+    lx = 34;
+  }
+  lv_obj_t *l = label(b, label_t, lx, 0, pw - lx - 6, f.f12, TEXT2);
+  lv_obj_align(l, LV_ALIGN_LEFT_MID, lx, 0);
+}
+
 // NOIR Thuis (simulator build(0))
-inline void thuis_bouwen(lv_obj_t *laag, const Fonts &f, const Beelden &bl) {
-  lv_obj_t *body = body_maken(laag, false);
+// items = tegels van de configuratorpagina "noir" (leeg = de ingebouwde tegels)
+inline void thuis_bouwen(lv_obj_t *laag, const Fonts &f, const Beelden &bl, JsonArrayConst items = JsonArrayConst()) {
+  Stand &s = st();
+  lv_obj_t *body = s.thuis_body = body_maken(laag, true);
+  lv_obj_set_height(body, 236);
   label(body, "NOIR / SIGNATURE", 0, 5, 180, f.f16, TEXT);
   label(body, "Home Control", 0, 30, 216, f.f12, MUTED);
   lv_obj_t *tw = knop(body, 184, 0, 32, 32, INSTELLINGEN);
@@ -258,14 +334,26 @@ inline void thuis_bouwen(lv_obj_t *laag, const Fonts &f, const Beelden &bl) {
     lv_obj_set_style_text_color(i, k(TEXT2), 0);
     lv_obj_center(i);
   }
+  if (!items.isNull() && items.size() > 0) {   // NOIR-builder: tegels uit de configurator
+    lv_obj_t *raster = lv_obj_create(body);
+    lv_obj_remove_style_all(raster);
+    lv_obj_set_pos(raster, 0, TEGELS_Y);
+    lv_obj_set_size(raster, 216, LV_SIZE_CONTENT);
+    lv_obj_remove_flag(raster, (lv_obj_flag_t) (LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+    int i = 0;
+    for (JsonObjectConst it : items) {
+      if (i >= 40) break;
+      item_tegel(raster, it, i, f, bl);
+      i++;
+    }
+    return;
+  }
   // 2026-11-22: Airco erbij - drie rijen van 56 hoog (simulator: twee van 66), Airco over de volle breedte
   tegel(body, "TV", 0, 52, TV, bl.tv, f, 104, 56);
   tegel(body, "Audio", 112, 52, AUDIO, bl.audio, f, 104, 56);
   tegel(body, "Verlichting", 0, 114, LICHT, bl.licht, f, 104, 56);
   tegel(body, "Sc\xC3\xA8nes", 112, 114, SCENES, bl.scenes, f, 104, 56);
   tegel(body, "Airco", 0, 176, AIRCO, nullptr, f, 216, 50, ICO_SNEEUW);
-  onderknop(laag, ICO_LINKS, "Terug", 12, TERUG, f);
-  onderknop(laag, ICO_HOME, "Thuis", 124, THUIS, f);
 }
 
 static const char *ICO_POWER = "\U000F0425";
@@ -304,15 +392,33 @@ inline void tv_bouwen(lv_obj_t *laag, const Fonts &f, const Beelden &bl) {
 }
 
 // Lagen over page_home bouwen (eenmalig). home = page_home->obj.
-inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl) {
+inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl, JsonArrayConst thuis_items = JsonArrayConst()) {
   Stand &s = st();
   if (s.toast_font == nullptr) s.toast_font = f.f14;
   if (s.laag != nullptr || home == nullptr) return;
+  s.fonts = f;
+  s.beelden = bl;
   s.laag = laag_maken(home, bl);
-  thuis_bouwen(s.laag, f, bl);
+  thuis_bouwen(s.laag, f, bl, thuis_items);
+  onderknop(s.laag, ICO_LINKS, "Terug", 12, TERUG, f);
+  onderknop(s.laag, ICO_HOME, "Thuis", 124, THUIS, f);
   s.tv = laag_maken(home, bl);
   tv_bouwen(s.tv, f, bl);
   kop_maken(s.laag, f);
+}
+
+// Nieuwe configuratie: tegels van NOIR Thuis opnieuw opbouwen (statusbalk en Terug/Thuis blijven)
+inline void thuis_herbouwen(JsonArrayConst items) {
+  Stand &s = st();
+  if (s.laag == nullptr) return;
+  if (s.thuis_body != nullptr) { lv_obj_delete(s.thuis_body); s.thuis_body = nullptr; }
+  thuis_bouwen(s.laag, s.fonts, s.beelden, items);
+  lv_obj_move_background(s.thuis_body);
+  // wallpaper blijft onderop
+  if (lv_obj_get_child_count(s.laag) > 0 && lv_obj_check_type(lv_obj_get_child(s.laag, 0), &lv_image_class) == false) {
+    for (uint32_t c = 0; c < lv_obj_get_child_count(s.laag); c++)
+      if (lv_obj_check_type(lv_obj_get_child(s.laag, c), &lv_image_class)) { lv_obj_move_background(lv_obj_get_child(s.laag, c)); break; }
+  }
 }
 
 inline lv_obj_t *laag_van(int seite) { return seite == S_TV ? st().tv : st().laag; }

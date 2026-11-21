@@ -659,6 +659,7 @@ inline void seite_zeigen(lvgl::LvPageType *seite, lv_screen_load_anim_t anim);
 // Skin wechseln (2026-11-19, esphomeremote-skin.h): merken, anwenden, Hintergrundbild pruefen, Namen kurz zeigen.
 // Die Einstellung skin_nr meldet der Abgleich von selbst an den Konfigurator.
 inline void modus_anzeige(const char *name, uint32_t ms);
+inline void noir_actie(int a);   // NOIR (esphomeremote-noir.h), weiter unten
 inline void skin_waehlen(int nr) {
   if (!skin::gueltig(nr, tk_cfg->wurzel())) nr = 0;
   if (nr != skin_nr->value()) {
@@ -693,6 +694,8 @@ inline void intern(const char *fn, int arg, const Ctx &c) {
   else if (!strcmp(fn, "keyboard")) kbd_popup_zeigen->execute();
   else if (!strcmp(fn, "kbd_light")) toggle_kbd_light->execute();
   else if (!strcmp(fn, "skin_next")) skin_waehlen(skin::naechster(skin_nr->value(), tk_cfg->wurzel()));
+  else if (!strcmp(fn, "noir_tv")) noir_actie(noir::TV);          // NOIR TV-scherm (tv + KEF aan via de TV-activiteit)
+  else if (!strcmp(fn, "noir_thuis")) noir_actie(noir::THUIS);    // NOIR Thuis
   else if (!strcmp(fn, "skin")) skin_waehlen(arg);
   else if (!strcmp(fn, "mic_toggle")) toggle_mic->execute();
   else if (!strcmp(fn, "clean")) clean_run->execute();
@@ -1032,14 +1035,48 @@ inline int noir_tv_index() {
 inline void noir_tv_starten() {
   const int i = noir_tv_index();
   if (i < 0) {
-    noir::toast("Geen activiteit \"TV\" in de configurator", 2500);
+    // Onderscheid (2026-11-22): geen configuratie op de remote (nog niet geladen of toetsindeling uit) of de naam klopt niet
+    if (tk_cfg->aktivitaeten() <= 0) noir::toast("Configuratie nog niet geladen", 2500);
+    else noir::toast(("Geen activiteit \"" + noir_tv_activiteit() + "\"").c_str(), 2500);
+    ESP_LOGW("noir", "TV-activiteit '%s' niet gevonden (%d activiteiten geladen)", noir_tv_activiteit().c_str(), tk_cfg->aktivitaeten());
     return;
   }
   if (!akt_an->value() || activity->value() != i) aktivitaet_setzen(i);
   else if (!noir::tv_aan()) tk_cfg->aktivitaet_ereignis(i, true);
   noir::zeigen_seite(noir::S_TV);   // na het wisselen: de startpagina kan opnieuw opgebouwd zijn
 }
+// NOIR-builder (2026-11-22): tegels van NOIR Thuis = pagina "noir" uit het menu van de configurator
+inline JsonArrayConst noir_items() {
+  JsonArrayConst pages = tk_cfg->wurzel()["menu"]["pages"];
+  for (JsonObjectConst p : pages)
+    if (strcmp(p["id"] | "", "noir") == 0) return p["items"].as<JsonArrayConst>();
+  return JsonArrayConst();
+}
+// Tik op tegel i: zoals in het menu - page opent een menupagina, special een ingebouwde pagina, verder de stappen
+// van het item, of (zonder stappen) aan/uit van de entiteit
+inline void noir_item_actie(int index) {
+  JsonArrayConst items = noir_items();
+  if (items.isNull() || index < 0 || index >= (int) items.size()) return;
+  JsonObjectConst it = items[index];
+  const std::string t = it["t"] | "";
+  JsonArrayConst steps = it["steps"];
+  const bool eigen = !steps.isNull() && steps.size() > 0;
+  const std::string e = it["entity"] | "";
+  if (t == "page") { noir_menupagina(it["target"] | ""); return; }
+  if (t == "special") {
+    const std::string pg = it["page"] | "";
+    if (pg == "media") { media_from->value() = 0; media_home_ms->value() = 0; seite_zeigen(page_media, LV_SCR_LOAD_ANIM_MOVE_LEFT); }
+    else if (pg == "noir_tv") noir_actie(noir::TV);
+    else spezial_zeigen(pg);
+    return;
+  }
+  if (eigen) { tk_cfg->schritte(steps); return; }
+  if (e.empty()) return;
+  const char *svc = t == "light" ? "light.toggle" : t == "cover" ? "cover.toggle" : "homeassistant.toggle";
+  tk_cfg->ha_aufruf(svc, {{"entity_id", e}});
+}
 inline void noir_actie(int a) {
+  if (a >= noir::ITEM) { noir_item_actie(a - noir::ITEM); return; }
   if (a >= noir::TV_APP && a < noir::TV_APP + 6) {   // app/bron op de tv (script uit je dashboard)
     const int i = a - noir::TV_APP;
     if (!noir::tv_aan()) noir_tv_starten();
@@ -1109,7 +1146,7 @@ inline void noir_starten(bool aan, const char *kef, const char *licht, const cha
     bl.app[5] = noir_app_plex->get_lv_image_dsc();
     noir::bouwen(page_home->obj,
                  {noir_i12->get_lv_font(), noir_i14->get_lv_font(), noir_i16->get_lv_font(), mdi_menu->get_lv_font(), noir_i20->get_lv_font()},
-                 bl);
+                 bl, noir_items());
     if (cur_page->value() == 0) noir::bij_home();
   }
   ESP_LOGI("noir", "NOIR-startscherm %s, KEF-volume: %s, TV: %s (activiteit '%s')", aan ? "aan" : "uit",
@@ -1227,6 +1264,7 @@ inline void einrichten() {
         }
       }
     }
+    noir::thuis_herbouwen(noir_items());   // NOIR-builder: tegels uit de configurator (2026-11-22)
     akzent_anwenden->execute();   // vor dem Neuaufbau: neue Teile holen akzent::farbe()
     apply_activity->execute();
     apply_home_layout->execute();

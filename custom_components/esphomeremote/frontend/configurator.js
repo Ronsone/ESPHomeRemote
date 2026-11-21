@@ -109,6 +109,8 @@ const INT_FNS = [
   ["kbd_light", "Tastenbeleuchtung an/aus"],
   ["skin_next", "Skin wechseln (nächster)"],
   ["skin", "Skin wählen …"],
+  ["noir_tv", "NOIR: TV-Bildschirm (TV + KEF an)"],
+  ["noir_thuis", "NOIR: Startbildschirm (Thuis)"],
   ["mic_toggle", "Mikrofon an/aus"],
   ["clean", "Reinigungsmodus (Zurück lang beendet)"],
   ["power_off", "Remote ausschalten"],
@@ -1572,6 +1574,7 @@ class EsphomeremoteKonfigurator extends HTMLElement {
       if (inp) { inp.dispatchEvent(new Event("change", { bubbles: true })); s.msg = { text: "Übernommen." }; this._render(); }
       return;
     }
+    if (a.startsWith("noir_")) { this._noirClick(a, t); this._render(); return; }   // NOIR-Builder (2026-11-22)
     if (a === "aw_test" || a === "aw_ok") { await this._appWizClick(a); this._render(); return; }   // App-Assistent
     if (a === "ut_do") { await this._uebertragen(); this._render(); return; }   // An andere Remotes
     if (a.startsWith("fk_")) { await this._fkClick(a, t); this._render(); return; }   // Funktionen
@@ -2341,7 +2344,7 @@ const kamName = (src) => M_KAMERAS.find(([k]) => k === kamSrc(src))?.[1] || "Kam
 const M_TYPE = Object.fromEntries(M_TYPES.map(([k, l, i]) => [k, { l, i }]));
 // Nur Funktionsseiten der Remote - die Navigationsseiten des alten Menues gibt es seit 2026-10-06 nicht mehr.
 const M_SPECIAL = [
-  ["media", "Mediaplayer"], ["ziffern", "Ziffernblock"], ["tastatur", "Tastatur (Buchstaben)"],
+  ["media", "Mediaplayer"], ["noir_tv", "NOIR: TV-Bildschirm"], ["ziffern", "Ziffernblock"], ["tastatur", "Tastatur (Buchstaben)"],
   ["cam_view", "Kamerabild auf der Remote"], ["cam_live", "Live-Bild auf der Remote"],
   ["ble", "Bluetooth"], ["voice_set", "Sprache"], ["bright", "Bildschirm"], ["show", "Anzeige"],
   ["power", "Energie & Wecken"], ["akku", "Akku"], ["service", "Wartung & Tests"], ["sd", "SD-Karte"],
@@ -7375,6 +7378,82 @@ const EinstTab = {
   },
   // Akzentfarbe der Remote (cfg.akzent): bei Tasten (unter dem Remote-Bild) und unter Einstellungen › Anzeige (2026-11-01,
   // Nutzer: "wo kann ich die Akzentfarbe einstellen ... gesamt irgendwo")
+  // ---- NOIR-Builder (2026-11-22) ----------------------------------------------------------------------------------
+  // Die Kacheln von NOIR Thuis sind die Eintraege der Menueseite "noir" (Firmware esphomeremote-noir.h). Bearbeitet
+  // wird sie im normalen Menue-Editor (Kacheln, Symbole, Schritte, Groesse/Position); hier Vorschau im NOIR-Stil.
+  _noirSeite() { return (this.cfg.menu?.pages || []).find((p) => p.id === "noir"); },
+  _noirStandard() {
+    const t = (label, icon, x, y, w, h, rest) => ({ t: "action", label, icon, x, y, w, h, ...rest });
+    return [
+      t("TV", "noir:tv", 0, 0, 3, 2, { steps: [{ t: "int", fn: "noir_tv" }] }),
+      { t: "special", label: "Audio", icon: "noir:audio", x: 3, y: 0, w: 3, h: 2, page: "media" },
+      t("Verlichting", "noir:licht", 0, 2, 3, 2, { steps: [{ t: "int", fn: "menu_open" }] }),
+      t("Scènes", "noir:scenes", 3, 2, 3, 2, { steps: [{ t: "int", fn: "menu_open" }] }),
+      t("Airco", "mdi:air-conditioner", 0, 4, 6, 2, { steps: [{ t: "int", fn: "menu_open" }] }),
+    ];
+  },
+  _noirClick(a, t) {
+    const m = this.menu;
+    if (a === "noir_edit" || a === "noir_new") {
+      if (!this._noirSeite()) { m.pages.push({ id: "noir", title: "NOIR Thuis", items: this._noirStandard() }); this._touch(); }
+      this._seiteMerken?.("menu");
+      this.s.mode = "menu"; this.s.mpage = "noir"; this.s.mitem = null;
+      return;
+    }
+    if (a === "noir_reset") {
+      if (!confirm("Kacheln von NOIR Thuis auf den Standard zurücksetzen (TV, Audio, Verlichting, Scènes, Airco)?")) return;
+      const p = this._noirSeite();
+      if (p) p.items = this._noirStandard(); else m.pages.push({ id: "noir", title: "NOIR Thuis", items: this._noirStandard() });
+      this._touch(); return;
+    }
+    if (a === "noir_weg") {
+      if (!confirm("Eigene Kacheln löschen? NOIR Thuis zeigt dann wieder die eingebauten Kacheln.")) return;
+      m.pages = m.pages.filter((p) => p.id !== "noir");
+      this._touch(); return;
+    }
+  },
+  // Kachel-Vorschau wie auf der Remote: 216 px Raster (6 Spalten, Abstand 8), Zeile 31 px
+  _noirVorschau(items) {
+    const ic = (icon) => {
+      if (!icon) return "";
+      const n = { "noir:tv": "mdi:television", "noir:audio": "mdi:waveform", "noir:licht": "mdi:floor-lamp-outline", "noir:scenes": "mdi:layers-outline" }[icon] || icon;
+      return `<ha-icon icon="${esc(n)}"></ha-icon>`;
+    };
+    const kach = (items || []).map((it) => {
+      const x = Math.max(0, Math.min(5, it.x || 0)), w = Math.max(1, Math.min(6 - x, it.w || 6)), y = it.y || 0, h = Math.max(1, Math.min(6, it.h || 2));
+      const px = Math.floor(x * 224 / 6), pw = Math.floor((x + w) * 224 / 6) - px - 8, py = 52 + y * 31, ph = h * 31 - 6;
+      if (it.t === "text") return `<span class="nvtxt" style="left:${px}px;top:${py + 4}px;width:${pw}px">${esc(it.label || "")}</span>`;
+      return `<span class="nvk ${ph >= 46 ? "gross" : "klein"}" style="left:${px}px;top:${py}px;width:${pw}px;height:${ph}px">${ic(it.icon)}<b>${esc(it.label || "")}</b></span>`;
+    }).join("");
+    return `<div class="noirv"><div class="nvbar"><i>23:55</i><span class="grow"></span><i>82%</i></div>
+      <div class="nvbody"><b class="nvt">NOIR / SIGNATURE</b><small class="nvs">Home Control</small><span class="nvk nvcog"><ha-icon icon="mdi:cog"></ha-icon></span>${kach}</div>
+      <div class="nvfuss"><span class="nvk"><ha-icon icon="mdi:arrow-left"></ha-icon>Terug</span><span class="nvk"><ha-icon icon="mdi:home"></ha-icon>Thuis</span></div></div>`;
+  },
+  _noirHtml() {
+    const p = this._noirSeite();
+    const items = p ? p.items : this._noirStandard();
+    return `<div class="noirb">
+      <div>${this._noirVorschau(items)}<small class="note">${p ? "Vorschau deiner Kacheln (Seite „noir“ im Menü)." : "Eingebaute Kacheln – noch keine eigenen."}</small></div>
+      <div class="noirbt">
+        <h2><ha-icon icon="mdi:view-grid-outline"></ha-icon> NOIR Thuis</h2>
+        <p>Die Kacheln des NOIR-Startbildschirms stellst du hier ein – <b>ohne neue Firmware</b>. Speichern überträgt sie an die Remote.</p>
+        <div class="inl">
+          <button class="btn" data-a="${p ? "noir_edit" : "noir_new"}"><ha-icon icon="mdi:pencil"></ha-icon>${p ? "Kacheln bearbeiten" : "Eigene Kacheln anlegen"}</button>
+          ${p ? `<button class="btn ghost" data-a="noir_reset"><ha-icon icon="mdi:backup-restore"></ha-icon>Standard</button>
+          <button class="btn ghost" data-a="noir_weg"><ha-icon icon="mdi:delete-outline"></ha-icon>Eigene löschen</button>` : ""}
+        </div>
+        <h3>So geht’s</h3>
+        <ul class="noirhilfe">
+          <li><b>Kacheln bearbeiten</b> öffnet die Seite „noir“ im Menü-Editor: Kachel hinzufügen, verschieben, Größe ziehen, Name und Symbol wählen.</li>
+          <li><b>Was eine Kachel tut</b>: wie im Menü – <i>Aktion</i> führt Schritte aus (Infrarot, Home Assistant, Warten …), <i>Seite</i> öffnet eine Menüseite (z. B. deine Airco-Seite), <i>Eingebaute Seite</i> z. B. Mediaplayer oder <i>NOIR: TV-Bildschirm</i>, <i>Schalter/Licht</i> schaltet die Entität.</li>
+          <li><b>TV wie bisher</b>: Aktion → Funktion der Remote → <i>NOIR: TV-Bildschirm (TV + KEF an)</i>.</li>
+          <li><b>Raster</b>: 6 Spalten; Höhe 2 = große Kachel (Symbol oben, Name unten), Höhe 1 = schmale Leiste. Was nicht auf den Bildschirm passt, scrollt.</li>
+          <li><b>Symbole</b>: alle aus der Symbolauswahl des Menüs; dazu <code>noir:tv</code>, <code>noir:audio</code>, <code>noir:licht</code>, <code>noir:scenes</code> für die NOIR-Linienzeichen.</li>
+        </ul>
+        <small class="note">Die Seite „noir“ erscheint auch in der Liste des Menü-Editors; im normalen Menü der Remote wird sie nur angezeigt, wenn du irgendwo auf sie verlinkst.</small>
+      </div></div>`;
+  },
+
   // Skins (2026-11-19): [[skin_nr, Name]] wie in der Firmware (eingebaute 0-5, eigene 10+i)
   _skinOptionen() {
     const o = SKINS_FEST.map(([n], i) => [i, n]);
@@ -8265,6 +8344,7 @@ const SEITEN_REMOTE = [
   ["ueber", "Übersicht", "mdi:heart-pulse"],
   ["keys", "Tasten", "mdi:gesture-tap-button"],
   ["home", "Startseite", "mdi:view-dashboard-outline"],
+  ["noir", "NOIR", "mdi:view-grid-outline"],
   ["dockanz", "Smart Display", "mdi:tablet-dashboard"],
   ["menu", "Menü", "mdi:menu-open"],
   ["gesten", "Gesten", "mdi:gesture"],
@@ -8776,6 +8856,7 @@ const OberflaecheTab = {
           <small class="note">Alle Geräte auf einmal aktualisieren: <button class="linkbtn" data-a="o_geh" data-b="werk">Werkstatt</button>.</small></div>`;
       }
       case "home": return this._homeHtml();
+      case "noir": return this._noirHtml();
       case "menu": return this._menuHtml();
       case "bt": case "ir": {
         const typ = s.mode === "bt" ? "btset" : "irset";
