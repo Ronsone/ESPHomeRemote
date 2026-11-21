@@ -13,7 +13,7 @@
 // verschoben.
 //
 // Auswahl: global skin_nr (Einstellung "skin_nr", mit dem Konfigurator abgeglichen, je Remote):
-//   0..ANZ_FEST-1  eingebaute Skins (Standard, Hell, OLED, Nord, Retro, Synthwave)
+//   0..ANZ_FEST-1  eingebaute Skins (Standard, Hell, OLED, Nord, Retro, Synthwave, NOIR)
 //   10 + i         eigener Skin i aus dem Konfigurator (cfg "skins": [{name, hg, karte, ...}], hoechstens 8)
 // Hintergrundbild (nur eigene Skins, "bild": true): SD-Karte /themes/<slug>/background.rle (RL16, 240x320,
 // tools/make_skin_wallpaper.py) oder /themes/<slug>/background.rgb565 (roh, 153600 Byte, wie OpenRemote).
@@ -62,6 +62,8 @@ static const Fest FESTE[] = {
   {"Nord",      {0x2E3440, 0x3B4252, 0x434C5E, 0x4C566A, 0x56607A, 0xECEFF4, 0x9AA5B8, 0x88C0D0, 0xA3BE8C, 0xEBCB8B, 0xBF616A}},
   {"Retro",     {0x0B0A07, 0x17140D, 0x211C12, 0x2E2618, 0x3A3020, 0xFFD9A0, 0xB08D57, 0xFFB000, 0x7FD15A, 0xFF8C00, 0xFF5544}},
   {"Synthwave", {0x120B1E, 0x1E1430, 0x2A1C42, 0x3A2858, 0x47306B, 0xF5E9FF, 0xA08CC0, 0xFF3EA5, 0x3EF7C4, 0xFFB347, 0xFF4D6D}},
+  // NOIR / Obsidian (2026-11-21): de grafietkleuren van het NOIR-startscherm (esphomeremote-noir.h)
+  {"NOIR",      {0x07080A, 0x1A1C20, 0x22252A, 0x383C43, 0x36393F, 0xF2F3F5, 0x969AA3, 0xBFC2C9, FEHLT,    FEHLT,    FEHLT}},
 };
 static const int ANZ_FEST = sizeof(FESTE) / sizeof(FESTE[0]);
 static const int EIGENE_AB = 10;

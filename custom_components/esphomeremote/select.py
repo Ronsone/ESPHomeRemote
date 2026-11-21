@@ -48,7 +48,7 @@ class AktAuswahl(AktBasis, SelectEntity):
 
 # ---- Skin (2026-11-19, esphomeremote-skin.h) ----------------------------------------------------------------------
 # Eingebaute Skins der Firmware (Nummer = Index) - gleiche Reihenfolge wie skin::FESTE
-SKINS_FEST = ["Standard", "Hell", "OLED", "Nord", "Retro", "Synthwave"]
+SKINS_FEST = ["Standard", "Hell", "OLED", "Nord", "Retro", "Synthwave", "NOIR"]
 SKIN_EIGENE_AB = 10
 
 

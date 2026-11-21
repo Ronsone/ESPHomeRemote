@@ -17,6 +17,7 @@ restart.
 | 3 | Nord | Nord palette (polar night + frost) |
 | 4 | Retro | amber terminal |
 | 5 | Synthwave | dark purple, neon pink accent |
+| 6 | NOIR | graphite of the NOIR / SIGNATURE home screen |
 
 ## Your own skins
 

@@ -1002,6 +1002,54 @@ inline void startseite_anwenden() {
   }
 }
 
+// NOIR-startscherm (2026-11-21, esphomeremote-noir.h): wat de tegels doen. Verlichting/Scenes openen een menupagina
+// uit de configurator (id via substitutions noir_licht_seite / noir_scenes_seite), leeg = het menu.
+inline std::string &noir_licht_seite() { static std::string s; return s; }
+inline std::string &noir_scenes_seite() { static std::string s; return s; }
+inline void noir_menupagina(const std::string &seite) {
+  if (!seite.empty() && mn->aktiv()) {
+    last_menu_ms->value() = 0;
+    popup_seite->value() = -1;
+    mn->oeffnen_auf(seite);
+    menue_zeigen();
+  } else {
+    open_menu->execute();
+  }
+}
+inline void noir_actie(int a) {
+  switch (a) {
+    case noir::TV: noir::zeigen(false); break;   // de gewone Aggro600-startpagina: activiteit, nu-afspelen, balk
+    case noir::AUDIO:   // Media-pagina zoals vanaf de startpagina (Terug = weer naar Thuis)
+      media_from->value() = 0;
+      media_home_ms->value() = 0;
+      seite_zeigen(page_media, LV_SCR_LOAD_ANIM_MOVE_LEFT);
+      break;
+    case noir::LICHT: noir_menupagina(noir_licht_seite()); break;
+    case noir::SCENES: noir_menupagina(noir_scenes_seite()); break;
+    case noir::INSTELLINGEN: open_menu_top->execute(); break;
+    case noir::TERUG: nav_back->execute(); break;
+    case noir::THUIS: noir::zeigen(true); break;
+    default: break;
+  }
+}
+// Bij het opstarten (on_boot, na het LVGL-begin): laag bouwen, KEF-route en tegeldoelen instellen
+inline void noir_starten(bool aan, const char *kef, const char *licht, const char *scenes) {
+  noir::st().aan = aan;
+  noir::st().actie = [](int a) { noir_actie(a); };
+  noir_licht_seite() = licht;
+  noir_scenes_seite() = scenes;
+  noir::kef::entiteit() = kef;
+  noir::kef::zender() = [](const std::string &svc, noir::kef::Data d) { tk_cfg->ha_aufruf(svc, std::move(d)); };
+  noir::kef::melding() = [](const char *t) { modus_anzeige(t, 1200); };
+  if (aan) {
+    noir::bouwen(page_home->obj, {noir_i12->get_lv_font(), noir_i14->get_lv_font(), noir_i16->get_lv_font(), mdi_menu->get_lv_font()},
+                 {noir_wall->get_lv_image_dsc(), noir_ico_tv->get_lv_image_dsc(), noir_ico_audio->get_lv_image_dsc(),
+                  noir_ico_licht->get_lv_image_dsc(), noir_ico_scenes->get_lv_image_dsc()});
+    if (cur_page->value() == 0) noir::bij_home();
+  }
+  ESP_LOGI("noir", "NOIR-startscherm %s, KEF-volume: %s", aan ? "aan" : "uit", *kef ? kef : "uit (toetsindeling)");
+}
+
 inline void einrichten() {
   auto *t = tk_cfg;
   t->intern = [](const char *fn, int arg, int geste, bool dunkel) {

@@ -17,6 +17,16 @@
 # =============================================================================
 
 substitutions:
+  # ---- NOIR / SIGNATURE (2026-11-21, esphomeremote-noir.h) - in je eigen esphomeremote.yaml overschrijven ----
+  #   noir_aan           "true" = NOIR Thuis als startscherm, "false" = gewone Aggro600-startpagina
+  #   noir_kef_entity    media_player van de KEF LSX II; de fysieke volumetoetsen sturen die op elk scherm.
+  #                      Leeg = uit (dan geldt de toetsindeling uit de configurator)
+  #   noir_licht_seite   id van de menupagina (configurator) voor de tegel Verlichting, leeg = menu
+  #   noir_scenes_seite  idem voor Scenes
+  noir_aan:          "true"
+  noir_kef_entity:   ""
+  noir_licht_seite:  ""
+  noir_scenes_seite: ""
   # ---- Tastenzeiten (ms) - gelten fuer den Tasten-Konfigurator (tasten_konfig) und den Tasten-Test ----
   #   key_debounce_ms  Software-Entprellung des Treibers. 0 = aus: der Treiber liest oft mehrere Ereignisse auf
   #                    einmal aus dem Chip und verwarf so das Loslassen eines schnellen Doppeldrucks. Den Rest
@@ -61,6 +71,7 @@ esphome:
     - esphomeremote-settings.h   # Einstellungen fuers Konfigurator-Menue (generiert, 2026-10-04)
     - esphomeremote-accent.h   # Akzentfarbe aus dem Konfigurator (2026-11-01)
     - esphomeremote-skin.h   # Skins: ganzes Farbpalett + Hintergrundbild, umschaltbar (2026-11-19)
+    - esphomeremote-noir.h   # NOIR / SIGNATURE-startscherm + KEF-volume op elk scherm (2026-11-21)
     - esphomeremote-keys.h   # Tasten-Konfigurator (2026-10-03)
     - esphomeremote-wifi.h
     - esphomeremote-durchsage.h   # Durchsage per WLAN ohne Bluetooth-Schicht (2026-11-09)
@@ -516,6 +527,7 @@ esphome:
             ESP_LOGI("sprache", "Sprache: Wahl %d, HA %s -> %s", id(sprache_wahl), id(sprache_ha_nl) ? "nl" : id(sprache_ha_en) ? "en" : "de",
                      sprache::niederlaendisch() ? "Niederlaendisch" : sprache::englisch() ? "Englisch" : "Deutsch");
         - script.execute: akzent_anwenden
+        - lambda: 'tasten::noir_starten(${noir_aan}, "${noir_kef_entity}", "${noir_licht_seite}", "${noir_scenes_seite}");'   # NOIR (2026-11-21)
         - lambda: 'id(mn)->set_spiegel(id(x_rechts)); touchpad::menue_anbinden();'   # X-Knopf rechts; Touchpad-Teile im Menue
         # Log-Ausfuehrlichkeit aus der Einstellung (Standard INFO).
         - if:
@@ -1035,6 +1047,21 @@ time:
 # Klingel-Projekt). Keine gemischten Schriftarten, nirgendwo.
 # -----------------------------------------------------------------------------
 font:
+  - file: 'fonts/Inter-Regular.ttf'   # NOIR (2026-11-21), SIL OFL 1.1 (fonts/Inter-OFL.txt)
+    id: noir_i12
+    size: 12
+    bpp: 4
+    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~€°±·«»¿¡ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝßàáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ–—’‘”“„…←"
+  - file: 'fonts/Inter-Regular.ttf'   # NOIR (2026-11-21), SIL OFL 1.1 (fonts/Inter-OFL.txt)
+    id: noir_i14
+    size: 14
+    bpp: 4
+    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~€°±·«»¿¡ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝßàáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ–—’‘”“„…←"
+  - file: 'fonts/Inter-Regular.ttf'   # NOIR (2026-11-21), SIL OFL 1.1 (fonts/Inter-OFL.txt)
+    id: noir_i16
+    size: 16
+    bpp: 4
+    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~€°±·«»¿¡ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝßàáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ–—’‘”“„…←"
   - file: 'fonts/Audiowide-Regular.ttf'
     id: a13
     size: 13
@@ -1823,6 +1850,31 @@ http_request:
 # liefert). Platzhalter-URL hier nur fuers Schema - wird beim Boot noch
 # nicht abgerufen (update_interval ist "never", siehe online_image-Default).
 image:
+  # NOIR (2026-11-21): Obsidian-wallpaper en Lucide-iconen (ISC, images/noir/LUCIDE-LICENSE.txt) uit het bouwpakket
+  - platform: file
+    id: noir_wall
+    file: images/noir/obsidian.png
+    type: GRAYSCALE
+  - platform: file
+    id: noir_ico_tv
+    file: images/noir/home_tv.png
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    id: noir_ico_audio
+    file: images/noir/home_audio.png
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    id: noir_ico_licht
+    file: images/noir/home_light.png
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    id: noir_ico_scenes
+    file: images/noir/home_scenes.png
+    type: RGB565
+    transparency: alpha_channel
   - platform: online_image
     id: mp_cover_image
     url: "http://${ha_host}/"
@@ -2138,6 +2190,17 @@ light:
     restore_mode: ALWAYS_OFF        # Tastenbeleuchtung standardmaessig aus
 
 interval:
+  # NOIR (2026-11-21): KEF-volume herhalen zolang de toets ingedrukt is, statusbalk van NOIR Thuis
+  - interval: 100ms
+    then:
+      - lambda: |-
+          noir::kef::herhaal_tik(millis());
+          static uint32_t vorige = 0;
+          if (millis() - vorige < 1000) return;
+          vorige = millis();
+          auto nu = id(sntp_time).now();
+          noir::status(nu.is_valid() ? nu.hour : -1, nu.is_valid() ? nu.minute : 0, id(akku_pct), id(laedt),
+                       api::global_api_server != nullptr && api::global_api_server->is_connected());
   # Durchsage per WLAN (esphomeremote-durchsage.h, 2026-11-09): Antworten von HA anzeigen, am Ende Mikrofon aus -
   # wie on_voice_event der Bluetooth-Schicht
   - interval: 100ms
@@ -6873,6 +6936,9 @@ tca8418:
               if (pressed && keycode == 13) id(nav_back)->execute();
               return;
             }
+            // ---- KEF LSX II (2026-11-21, esphomeremote-noir.h): Lauter/Leiser/Stumm op elk scherm naar de KEF -
+            // vóór alle scherm- en invoerlogica en vóór de toetsindeling (behalve in de toetsentest)
+            if (!id(button_test_mode) && noir::kef::taste(keycode, pressed)) return;
             // ---- Tasten-Konfigurator (HA-Panel "Fernbedienung"): die Belegung uebernimmt alle Tasten -
             // ausser im Tasten-Test und der Navigation (D-Pad/OK/Zurueck) auf den Seiten der Remote.
             // Geraete-Liste von Tastatur/Touchpad offen (2026-11-20): Steuerkreuz, OK, Zurueck gehoeren ihr
@@ -7667,6 +7733,7 @@ lvgl:
         - script.execute: apply_home_layout
         - script.execute: focus_apply
         - lambda: 'tasten::dock_anim(400);'   # Dock baut sich auf (2026-10-13); 400 ms spaeter, sonst vorbei, bevor man hinsieht
+        - lambda: 'noir::bij_home();'   # NOIR Thuis over de startpagina (2026-11-21)
       widgets:
         - obj:
             id: home_status_bar

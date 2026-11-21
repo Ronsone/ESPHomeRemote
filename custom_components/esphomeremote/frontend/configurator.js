@@ -136,6 +136,7 @@ const SKINS_FEST = [
   ["Nord", { hg: "#2E3440", karte: "#3B4252", karte2: "#434C5E", linie: "#4C566A", spur: "#56607A", text: "#ECEFF4", matt: "#9AA5B8", akzent: "#88C0D0", ok: "#A3BE8C", warn: "#EBCB8B", fehler: "#BF616A" }],
   ["Retro", { hg: "#0B0A07", karte: "#17140D", karte2: "#211C12", linie: "#2E2618", spur: "#3A3020", text: "#FFD9A0", matt: "#B08D57", akzent: "#FFB000", ok: "#7FD15A", warn: "#FF8C00", fehler: "#FF5544" }],
   ["Synthwave", { hg: "#120B1E", karte: "#1E1430", karte2: "#2A1C42", linie: "#3A2858", spur: "#47306B", text: "#F5E9FF", matt: "#A08CC0", akzent: "#FF3EA5", ok: "#3EF7C4", warn: "#FFB347", fehler: "#FF4D6D" }],
+  ["NOIR", { hg: "#07080A", karte: "#1A1C20", karte2: "#22252A", linie: "#383C43", spur: "#36393F", text: "#F2F3F5", matt: "#969AA3", akzent: "#BFC2C9" }],
 ];
 const skinSlug = (n) => String(n || "").toLowerCase().replace(/[^a-z0-9 _-]/g, "").replace(/[ _-]+/g, "_").replace(/^_+|_+$/g, "") || "skin";
 // Steuerkreuz-Assistent: [Feld, Taste, Name, Symbol, Namensmuster der Kamera-Tasten, Spalte, Zeile im Block]
