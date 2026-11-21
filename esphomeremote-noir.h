@@ -37,6 +37,7 @@ struct Stand {
   bool aan{false};      // NOIR als startscherm gebruiken
   bool zichtbaar{false};
   std::function<void(int)> actie;   // wordt door de firmware ingevuld (tasten::noir_actie)
+  const lv_font_t *toast_font{nullptr};
 };
 inline Stand &st() { static Stand s; return s; }
 
@@ -145,6 +146,7 @@ static const char *ICO_HOME = "\U000F02DC";
 // Laag over page_home bouwen (eenmalig). home = page_home->obj.
 inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl) {
   Stand &s = st();
+  if (s.toast_font == nullptr) s.toast_font = f.f14;
   if (s.laag != nullptr || home == nullptr) return;
   lv_obj_t *laag = s.laag = lv_obj_create(home);
   lv_obj_remove_style_all(laag);
@@ -229,6 +231,33 @@ inline void status(int uu, int mm, int pct, bool laden, bool ha) {
   lv_obj_set_width(s.batt_fill, w);
   lv_obj_set_style_bg_color(s.batt_fill, k(laden ? 0xF2F3F5 : BATT_F), 0);
   lv_obj_set_style_bg_opa(s.ha_dot, ha ? 220 : 45, 0);
+}
+
+// Korte melding bovenaan (verdwijnt vanzelf na ms). Eigen label op lv_layer_top - de pil van de firmware
+// (tasten::modus_anzeige) hoort bij de volgmodus en verdwijnt niet vanzelf (2026-11-21: bleef staan na Stumm).
+inline void toast(const char *tekst, uint32_t ms = 1500) {
+  static lv_obj_t *t = nullptr;
+  static lv_timer_t *weg = nullptr;
+  if (t == nullptr) {
+    t = lv_label_create(lv_layer_top());
+    lv_obj_set_style_bg_color(t, k(SURF), 0);
+    lv_obj_set_style_bg_opa(t, 240, 0);
+    lv_obj_set_style_text_color(t, k(TEXT), 0);
+    if (st().toast_font != nullptr) lv_obj_set_style_text_font(t, st().toast_font, 0);
+    lv_obj_set_style_radius(t, 14, 0);
+    lv_obj_set_style_border_width(t, 1, 0);
+    lv_obj_set_style_border_color(t, k(RAND_P), 0);
+    lv_obj_set_style_pad_hor(t, 16, 0);
+    lv_obj_set_style_pad_ver(t, 8, 0);
+    lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 6);
+    lv_obj_remove_flag(t, LV_OBJ_FLAG_CLICKABLE);
+  }
+  lv_label_set_text(t, tekst);
+  lv_obj_remove_flag(t, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_foreground(t);
+  if (weg != nullptr) lv_timer_delete(weg);
+  weg = lv_timer_create([](lv_timer_t *) { lv_obj_add_flag(t, LV_OBJ_FLAG_HIDDEN); weg = nullptr; }, ms, nullptr);
+  lv_timer_set_repeat_count(weg, 1);
 }
 
 // ---- KEF LSX II: hardwarevolume op elk scherm --------------------------------------------------------------------

@@ -666,7 +666,7 @@ inline void skin_waehlen(int nr) {
     skin::bild_fehlt().clear();
     akzent_anwenden->execute();
   }
-  modus_anzeige(skin::aufloesen(nr, tk_cfg->wurzel()).name.c_str(), 1500);
+  noir::toast(skin::aufloesen(nr, tk_cfg->wurzel()).name.c_str());   // verdwijnt vanzelf (modus_anzeige bleef staan)
 }
 
 inline void intern(const char *fn, int arg, const Ctx &c) {
@@ -1040,7 +1040,8 @@ inline void noir_starten(bool aan, const char *kef, const char *licht, const cha
   noir_scenes_seite() = scenes;
   noir::kef::entiteit() = kef;
   noir::kef::zender() = [](const std::string &svc, noir::kef::Data d) { tk_cfg->ha_aufruf(svc, std::move(d)); };
-  noir::kef::melding() = [](const char *t) { modus_anzeige(t, 1200); };
+  noir::st().toast_font = noir_i14->get_lv_font();
+  noir::kef::melding() = [](const char *t) { if (!disp_off->value()) noir::toast(t); };
   if (aan) {
     noir::bouwen(page_home->obj, {noir_i12->get_lv_font(), noir_i14->get_lv_font(), noir_i16->get_lv_font(), mdi_menu->get_lv_font()},
                  {noir_wall->get_lv_image_dsc(), noir_ico_tv->get_lv_image_dsc(), noir_ico_audio->get_lv_image_dsc(),
