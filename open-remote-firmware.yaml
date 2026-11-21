@@ -781,7 +781,7 @@ deep_sleep:
   id: nachtschlaf
 
 external_components:
-  - source: {type: git, url: https://github.com/JOUWNAAM/ESPHomeRemote, ref: master, path: components}
+  - source: {type: git, url: https://github.com/ronsone/ESPHomeRemote, ref: master, path: components}
     refresh: 0s
     # online_image: eigene Fassung (2026-10-10) - Download und JPEG-Dekodierung im Hintergrund-Task, die Remote
     # bleibt bedienbar, waehrend Cover/Klingelbilder per WLAN oder Bluetooth kommen (s. components/online_image).
