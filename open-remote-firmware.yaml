@@ -37,6 +37,7 @@ substitutions:
   noir_kef_entity:   ""
   noir_licht_seite:  ""
   noir_scenes_seite: ""
+  noir_airco_seite:  ""   # id van de menupagina (configurator) voor de tegel Airco, leeg = menu
   #   noir_tv_entity     media_player van de tv (status op het TV-scherm, D-pad/OK/Terug/Home via webostv.button)
   #   noir_tv_activiteit naam van de activiteit in de configurator die tv (IR) en KEF aanzet
   #   noir_tv_script     HA-script voor de app-tegels, krijgt tv_source mee
@@ -548,7 +549,7 @@ esphome:
             ESP_LOGI("sprache", "Sprache: Wahl %d, HA %s -> %s", id(sprache_wahl), id(sprache_ha_nl) ? "nl" : id(sprache_ha_en) ? "en" : "de",
                      sprache::niederlaendisch() ? "Niederlaendisch" : sprache::englisch() ? "Englisch" : "Deutsch");
         - script.execute: akzent_anwenden
-        - lambda: 'tasten::noir_starten(${noir_aan}, "${noir_kef_entity}", "${noir_licht_seite}", "${noir_scenes_seite}", "${noir_tv_entity}", "${noir_tv_activiteit}", "${noir_tv_script}", "${noir_tv_bronnen}");'   # NOIR (2026-11-21)
+        - lambda: 'tasten::noir_starten(${noir_aan}, "${noir_kef_entity}", "${noir_licht_seite}", "${noir_scenes_seite}", "${noir_tv_entity}", "${noir_tv_activiteit}", "${noir_tv_script}", "${noir_tv_bronnen}", "${noir_airco_seite}");'   # NOIR (2026-11-21)
         - lambda: 'id(mn)->set_spiegel(id(x_rechts)); touchpad::menue_anbinden();'   # X-Knopf rechts; Touchpad-Teile im Menue
         # Log-Ausfuehrlichkeit aus der Einstellung (Standard INFO).
         - if:

@@ -1008,6 +1008,7 @@ inline std::string &noir_licht_seite() { static std::string s; return s; }
 inline std::string &noir_tv_activiteit() { static std::string s; return s; }   // naam van de TV-activiteit
 inline std::string &noir_tv_script() { static std::string s; return s; }       // script voor apps/bronnen
 inline std::string &noir_scenes_seite() { static std::string s; return s; }
+inline std::string &noir_airco_seite() { static std::string s; return s; }
 inline void noir_menupagina(const std::string &seite) {
   if (!seite.empty() && mn->aktiv()) {
     last_menu_ms->value() = 0;
@@ -1067,6 +1068,7 @@ inline void noir_actie(int a) {
       break;
     case noir::LICHT: noir_menupagina(noir_licht_seite()); break;
     case noir::SCENES: noir_menupagina(noir_scenes_seite()); break;
+    case noir::AIRCO: noir_menupagina(noir_airco_seite()); break;   // menupagina met je airco-knoppen (IR/HA)
     case noir::INSTELLINGEN: open_menu_top->execute(); break;
     case noir::TERUG:
       if (noir::st().seite != noir::S_THUIS) noir::zeigen_seite(noir::S_THUIS);
@@ -1078,7 +1080,8 @@ inline void noir_actie(int a) {
 }
 // Bij het opstarten (on_boot, na het LVGL-begin): laag bouwen, KEF-route en tegeldoelen instellen
 inline void noir_starten(bool aan, const char *kef, const char *licht, const char *scenes, const char *tv,
-                         const char *tv_activiteit, const char *tv_script, const char *tv_bronnen) {
+                         const char *tv_activiteit, const char *tv_script, const char *tv_bronnen, const char *airco) {
+  noir_airco_seite() = airco;
   noir::tv::entiteit() = strstr(tv, "niet_ingesteld") != nullptr ? "" : tv;
   noir_tv_activiteit() = tv_activiteit;
   noir_tv_script() = tv_script;

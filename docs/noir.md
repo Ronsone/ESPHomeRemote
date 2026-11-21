@@ -37,6 +37,7 @@ substitutions:
   noir_kef_entity: "media_player.kef_lsx_ii"     # exacte entity_id uit HA (leeg = volumetoetsen volgens toetsindeling)
   noir_licht_seite: ""                           # id van een menupagina uit de configurator, of leeg
   noir_scenes_seite: ""
+  noir_airco_seite: ""                           # menupagina met je airco-knoppen (IR/HA), leeg = menu
   noir_tv_entity: "media_player.woonkamer_lg_webos_tv_oled65b56la_deuqljp"
   noir_tv_activiteit: "TV"                       # naam van de activiteit in de configurator
   noir_tv_script: "script.tv_bron_kef"

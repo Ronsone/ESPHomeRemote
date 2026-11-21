@@ -27,7 +27,7 @@ static const uint32_t BG = 0x07080A, SURF = 0x1A1C20, SURF2 = 0x101114, SURF_DIM
 
 // Acties van de tegels (zelfde betekenis als action() in de simulator: 101-104 tegels, 113 instellingen, 1 Terug,
 // 100 Thuis)
-enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, SCENES = 104, INSTELLINGEN = 113,
+enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, SCENES = 104, AIRCO = 105, INSTELLINGEN = 113,
                    TV_AANUIT = 120, TV_APP = 200 /* 200-205: app-tegels */ };
 
 struct Fonts { const lv_font_t *f12{nullptr}, *f14{nullptr}, *f16{nullptr}, *ico{nullptr}, *f20{nullptr}; };
@@ -128,17 +128,30 @@ inline lv_obj_t *knop(lv_obj_t *p, int x, int y, int w, int h, int actie) {
   return b;
 }
 
-inline void tegel(lv_obj_t *body, const char *t, int x, int y, int actie, const void *icoon, const Fonts &f) {
-  lv_obj_t *b = knop(body, x, y, 104, 66, actie);
+// Tegel op NOIR Thuis: icoon linksboven (afbeelding of MDI-teken), naam linksonder. h = hoogte, w = breedte.
+inline lv_obj_t *tegel(lv_obj_t *body, const char *t, int x, int y, int actie, const void *icoon, const Fonts &f,
+                       int w = 104, int h = 66, const char *mdi = nullptr) {
+  lv_obj_t *b = knop(body, x, y, w, h, actie);
+  const int iy = h >= 60 ? 10 : 8;
   if (icoon != nullptr) {
     lv_obj_t *im = lv_image_create(b);
     lv_image_set_src(im, icoon);
-    lv_obj_set_pos(im, 13, 10);
+    lv_obj_set_pos(im, 13, iy);
     lv_obj_set_style_image_opa(im, 210, 0);
     lv_obj_remove_flag(im, LV_OBJ_FLAG_CLICKABLE);
+  } else if (mdi != nullptr && f.ico != nullptr) {
+    lv_obj_t *i = lv_label_create(b);
+    lv_label_set_text(i, mdi);
+    lv_obj_set_style_text_font(i, f.ico, 0);
+    lv_obj_set_style_text_color(i, k(TEXT2), 0);
+    lv_obj_set_style_text_opa(i, 210, 0);
+    lv_obj_set_pos(i, 12, iy - 1);
+    lv_obj_remove_flag(i, LV_OBJ_FLAG_CLICKABLE);
   }
-  label(b, t, 12, 66 - 25, 80, f.f14, TEXT2);
+  label(b, t, 12, h - 25, w - 24, f.f14, TEXT2);
+  return b;
 }
+static const char *ICO_SNEEUW = "\U000F0717";   // mdi:snowflake (airco)
 
 // Terug / Thuis onderaan: donkerder vlak zonder verloop (simulator: p == scr && a == 1 || a == 100)
 inline void onderknop(lv_obj_t *p, const char *ico, const char *t, int x, int actie, const Fonts &f) {
@@ -245,10 +258,12 @@ inline void thuis_bouwen(lv_obj_t *laag, const Fonts &f, const Beelden &bl) {
     lv_obj_set_style_text_color(i, k(TEXT2), 0);
     lv_obj_center(i);
   }
-  tegel(body, "TV", 0, 58, TV, bl.tv, f);
-  tegel(body, "Audio", 112, 58, AUDIO, bl.audio, f);
-  tegel(body, "Verlichting", 0, 132, LICHT, bl.licht, f);
-  tegel(body, "Sc\xC3\xA8nes", 112, 132, SCENES, bl.scenes, f);
+  // 2026-11-22: Airco erbij - drie rijen van 56 hoog (simulator: twee van 66), Airco over de volle breedte
+  tegel(body, "TV", 0, 52, TV, bl.tv, f, 104, 56);
+  tegel(body, "Audio", 112, 52, AUDIO, bl.audio, f, 104, 56);
+  tegel(body, "Verlichting", 0, 114, LICHT, bl.licht, f, 104, 56);
+  tegel(body, "Sc\xC3\xA8nes", 112, 114, SCENES, bl.scenes, f, 104, 56);
+  tegel(body, "Airco", 0, 176, AIRCO, nullptr, f, 216, 50, ICO_SNEEUW);
   onderknop(laag, ICO_LINKS, "Terug", 12, TERUG, f);
   onderknop(laag, ICO_HOME, "Thuis", 124, THUIS, f);
 }
