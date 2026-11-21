@@ -27,6 +27,14 @@ substitutions:
   noir_kef_entity:   ""
   noir_licht_seite:  ""
   noir_scenes_seite: ""
+  #   noir_tv_entity     media_player van de tv (status op het TV-scherm, D-pad/OK/Terug/Home via webostv.button)
+  #   noir_tv_activiteit naam van de activiteit in de configurator die tv (IR) en KEF aanzet
+  #   noir_tv_script     HA-script voor de app-tegels, krijgt tv_source mee
+  #   noir_tv_bronnen    tv_source voor de 6 tegels PS5|Switch|Netflix|YouTube|Cookie IPTV|Plex
+  noir_tv_entity:     "media_player.noir_tv_niet_ingesteld"   # placeholder = uit (HA-sensoren hebben een geldige id nodig)
+  noir_tv_activiteit: "TV"
+  noir_tv_script:     "script.tv_bron_kef"
+  noir_tv_bronnen:    "PS5 Gameconsole|HDMI 2|Netflix|YouTube|Cookie IPTV|Plex"
   # ---- Tastenzeiten (ms) - gelten fuer den Tasten-Konfigurator (tasten_konfig) und den Tasten-Test ----
   #   key_debounce_ms  Software-Entprellung des Treibers. 0 = aus: der Treiber liest oft mehrere Ereignisse auf
   #                    einmal aus dem Chip und verwarf so das Loslassen eines schnellen Doppeldrucks. Den Rest
@@ -527,7 +535,7 @@ esphome:
             ESP_LOGI("sprache", "Sprache: Wahl %d, HA %s -> %s", id(sprache_wahl), id(sprache_ha_nl) ? "nl" : id(sprache_ha_en) ? "en" : "de",
                      sprache::niederlaendisch() ? "Niederlaendisch" : sprache::englisch() ? "Englisch" : "Deutsch");
         - script.execute: akzent_anwenden
-        - lambda: 'tasten::noir_starten(${noir_aan}, "${noir_kef_entity}", "${noir_licht_seite}", "${noir_scenes_seite}");'   # NOIR (2026-11-21)
+        - lambda: 'tasten::noir_starten(${noir_aan}, "${noir_kef_entity}", "${noir_licht_seite}", "${noir_scenes_seite}", "${noir_tv_entity}", "${noir_tv_activiteit}", "${noir_tv_script}", "${noir_tv_bronnen}");'   # NOIR (2026-11-21)
         - lambda: 'id(mn)->set_spiegel(id(x_rechts)); touchpad::menue_anbinden();'   # X-Knopf rechts; Touchpad-Teile im Menue
         # Log-Ausfuehrlichkeit aus der Einstellung (Standard INFO).
         - if:
@@ -1060,6 +1068,11 @@ font:
   - file: 'fonts/Inter-Regular.ttf'   # NOIR (2026-11-21), SIL OFL 1.1 (fonts/Inter-OFL.txt)
     id: noir_i16
     size: 16
+    bpp: 4
+    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~€°±·«»¿¡ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝßàáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ–—’‘”“„…←"
+  - file: 'fonts/Inter-Regular.ttf'   # NOIR (2026-11-21), SIL OFL 1.1 (fonts/Inter-OFL.txt)
+    id: noir_i20
+    size: 20
     bpp: 4
     glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~€°±·«»¿¡ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝßàáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ–—’‘”“„…←"
   - file: 'fonts/Audiowide-Regular.ttf'
@@ -1875,6 +1888,32 @@ image:
     file: images/noir/home_scenes.png
     type: RGB565
     transparency: alpha_channel
+  # App-logo's (Simple Icons 11.15.0, CC0, images/noir/SOURCES.txt)
+  - platform: file
+    id: noir_app_ps5
+    file: images/noir/app_ps5.png
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    id: noir_app_switch
+    file: images/noir/app_switch.png
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    id: noir_app_netflix
+    file: images/noir/app_netflix.png
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    id: noir_app_youtube
+    file: images/noir/app_youtube.png
+    type: RGB565
+    transparency: alpha_channel
+  - platform: file
+    id: noir_app_plex
+    file: images/noir/app_plex.png
+    type: RGB565
+    transparency: alpha_channel
   - platform: online_image
     id: mp_cover_image
     url: "http://${ha_host}/"
@@ -2201,6 +2240,7 @@ interval:
           auto nu = id(sntp_time).now();
           noir::status(nu.is_valid() ? nu.hour : -1, nu.is_valid() ? nu.minute : 0, id(akku_pct), id(laedt),
                        api::global_api_server != nullptr && api::global_api_server->is_connected());
+          noir::tv_status(id(noir_tv_state).state, id(noir_tv_bron).state);
   # Durchsage per WLAN (esphomeremote-durchsage.h, 2026-11-09): Antworten von HA anzeigen, am Ende Mikrofon aus -
   # wie on_voice_event der Bluetooth-Schicht
   - interval: 100ms
@@ -6939,6 +6979,8 @@ tca8418:
             // ---- KEF LSX II (2026-11-21, esphomeremote-noir.h): Lauter/Leiser/Stumm op elk scherm naar de KEF -
             // vóór alle scherm- en invoerlogica en vóór de toetsindeling (behalve in de toetsentest)
             if (!id(button_test_mode) && noir::kef::taste(keycode, pressed)) return;
+            // ---- NOIR TV-scherm: D-pad/OK/Terug/Home naar de tv (webostv.button)
+            if (!id(button_test_mode) && noir::tv::taste(keycode, pressed, id(cur_page) == 0)) return;
             // ---- Tasten-Konfigurator (HA-Panel "Fernbedienung"): die Belegung uebernimmt alle Tasten -
             // ausser im Tasten-Test und der Navigation (D-Pad/OK/Zurueck) auf den Seiten der Remote.
             // Geraete-Liste von Tastatur/Touchpad offen (2026-11-20): Steuerkreuz, OK, Zurueck gehoeren ihr
@@ -7320,6 +7362,16 @@ sensor:
 
 
 text_sensor:
+  # NOIR TV-scherm (2026-11-21): status en bron van de tv uit HA (noir_tv_entity)
+  - platform: homeassistant
+    id: noir_tv_state
+    entity_id: ${noir_tv_entity}
+    internal: true
+  - platform: homeassistant
+    id: noir_tv_bron
+    entity_id: ${noir_tv_entity}
+    attribute: source
+    internal: true
   # Vorherige Firmware in der zweiten App-Partition (2026-11-12, s. on_boot -100 und btn_fw_vorher)
   - platform: template
     name: "Vorherige Firmware"

@@ -1005,6 +1005,8 @@ inline void startseite_anwenden() {
 // NOIR-startscherm (2026-11-21, esphomeremote-noir.h): wat de tegels doen. Verlichting/Scenes openen een menupagina
 // uit de configurator (id via substitutions noir_licht_seite / noir_scenes_seite), leeg = het menu.
 inline std::string &noir_licht_seite() { static std::string s; return s; }
+inline std::string &noir_tv_activiteit() { static std::string s; return s; }   // naam van de TV-activiteit
+inline std::string &noir_tv_script() { static std::string s; return s; }       // script voor apps/bronnen
 inline std::string &noir_scenes_seite() { static std::string s; return s; }
 inline void noir_menupagina(const std::string &seite) {
   if (!seite.empty() && mn->aktiv()) {
@@ -1016,9 +1018,48 @@ inline void noir_menupagina(const std::string &seite) {
     open_menu->execute();
   }
 }
+// Index van de TV-activiteit uit de configurator (naam zonder hoofdletters vergelijken), -1 = geen
+inline int noir_tv_index() {
+  auto klein = [](std::string x) { for (auto &c : x) c = (char) std::tolower((unsigned char) c); return x; };
+  const std::string zoek = klein(noir_tv_activiteit());
+  for (int i = 0; i < aktivitaeten_anzahl(); i++)
+    if (klein(tk_cfg->aktivitaet_name(i)) == zoek) return i;
+  return -1;
+}
+// TV aanzetten = de TV-activiteit starten (haar stappen "Beim Starten" uit de configurator: IR aan, KEF aan ...).
+// Loopt ze al, maar staat de tv uit: de startstappen nog eens uitvoeren.
+inline void noir_tv_starten() {
+  const int i = noir_tv_index();
+  if (i < 0) {
+    noir::toast("Geen activiteit \"TV\" in de configurator", 2500);
+    return;
+  }
+  if (!akt_an->value() || activity->value() != i) aktivitaet_setzen(i);
+  else if (!noir::tv_aan()) tk_cfg->aktivitaet_ereignis(i, true);
+  noir::zeigen_seite(noir::S_TV);   // na het wisselen: de startpagina kan opnieuw opgebouwd zijn
+}
 inline void noir_actie(int a) {
+  if (a >= noir::TV_APP && a < noir::TV_APP + 6) {   // app/bron op de tv (script uit je dashboard)
+    const int i = a - noir::TV_APP;
+    if (!noir::tv_aan()) noir_tv_starten();
+    if (!noir_tv_script().empty()) tk_cfg->ha_aufruf(noir_tv_script(), {{"tv_source", noir::app_bron()[i]}});
+    noir::toast(noir::APP_NAAM[i]);
+    return;
+  }
   switch (a) {
-    case noir::TV: noir::zeigen(false); break;   // de gewone Aggro600-startpagina: activiteit, nu-afspelen, balk
+    case noir::TV:   // tv + KEF aan (TV-activiteit), dan het NOIR TV-scherm
+      noir::zeigen_seite(noir::S_TV);
+      noir_tv_starten();
+      break;
+    case noir::TV_AANUIT:
+      if (noir::tv_aan() && !noir::tv::entiteit().empty()) {
+        tk_cfg->ha_aufruf("media_player.turn_off", {{"entity_id", noir::tv::entiteit()}});
+        noir::toast("TV uit");
+      } else {
+        noir_tv_starten();
+        noir::toast("TV aan");
+      }
+      break;
     case noir::AUDIO:   // Media-pagina zoals vanaf de startpagina (Terug = weer naar Thuis)
       media_from->value() = 0;
       media_home_ms->value() = 0;
@@ -1027,28 +1068,49 @@ inline void noir_actie(int a) {
     case noir::LICHT: noir_menupagina(noir_licht_seite()); break;
     case noir::SCENES: noir_menupagina(noir_scenes_seite()); break;
     case noir::INSTELLINGEN: open_menu_top->execute(); break;
-    case noir::TERUG: nav_back->execute(); break;
-    case noir::THUIS: noir::zeigen(true); break;
+    case noir::TERUG:
+      if (noir::st().seite != noir::S_THUIS) noir::zeigen_seite(noir::S_THUIS);
+      else nav_back->execute();
+      break;
+    case noir::THUIS: noir::zeigen_seite(noir::S_THUIS); break;
     default: break;
   }
 }
 // Bij het opstarten (on_boot, na het LVGL-begin): laag bouwen, KEF-route en tegeldoelen instellen
-inline void noir_starten(bool aan, const char *kef, const char *licht, const char *scenes) {
+inline void noir_starten(bool aan, const char *kef, const char *licht, const char *scenes, const char *tv,
+                         const char *tv_activiteit, const char *tv_script, const char *tv_bronnen) {
+  noir::tv::entiteit() = strstr(tv, "niet_ingesteld") != nullptr ? "" : tv;
+  noir_tv_activiteit() = tv_activiteit;
+  noir_tv_script() = tv_script;
+  noir::bronnen_zetten(tv_bronnen);
   noir::st().aan = aan;
   noir::st().actie = [](int a) { noir_actie(a); };
   noir_licht_seite() = licht;
   noir_scenes_seite() = scenes;
   noir::kef::entiteit() = kef;
-  noir::kef::zender() = [](const std::string &svc, noir::kef::Data d) { tk_cfg->ha_aufruf(svc, std::move(d)); };
+  noir::ha() = [](const std::string &svc, noir::Data d) { tk_cfg->ha_aufruf(svc, std::move(d)); };
   noir::st().toast_font = noir_i14->get_lv_font();
   noir::kef::melding() = [](const char *t) { if (!disp_off->value()) noir::toast(t); };
   if (aan) {
-    noir::bouwen(page_home->obj, {noir_i12->get_lv_font(), noir_i14->get_lv_font(), noir_i16->get_lv_font(), mdi_menu->get_lv_font()},
-                 {noir_wall->get_lv_image_dsc(), noir_ico_tv->get_lv_image_dsc(), noir_ico_audio->get_lv_image_dsc(),
-                  noir_ico_licht->get_lv_image_dsc(), noir_ico_scenes->get_lv_image_dsc()});
+    noir::Beelden bl;
+    bl.wall = noir_wall->get_lv_image_dsc();
+    bl.tv = noir_ico_tv->get_lv_image_dsc();
+    bl.audio = noir_ico_audio->get_lv_image_dsc();
+    bl.licht = noir_ico_licht->get_lv_image_dsc();
+    bl.scenes = noir_ico_scenes->get_lv_image_dsc();
+    bl.app[0] = noir_app_ps5->get_lv_image_dsc();
+    bl.app[1] = noir_app_switch->get_lv_image_dsc();
+    bl.app[2] = noir_app_netflix->get_lv_image_dsc();
+    bl.app[3] = noir_app_youtube->get_lv_image_dsc();
+    bl.app[4] = nullptr;   // Cookie IPTV: tekst
+    bl.app[5] = noir_app_plex->get_lv_image_dsc();
+    noir::bouwen(page_home->obj,
+                 {noir_i12->get_lv_font(), noir_i14->get_lv_font(), noir_i16->get_lv_font(), mdi_menu->get_lv_font(), noir_i20->get_lv_font()},
+                 bl);
     if (cur_page->value() == 0) noir::bij_home();
   }
-  ESP_LOGI("noir", "NOIR-startscherm %s, KEF-volume: %s", aan ? "aan" : "uit", *kef ? kef : "uit (toetsindeling)");
+  ESP_LOGI("noir", "NOIR-startscherm %s, KEF-volume: %s, TV: %s (activiteit '%s')", aan ? "aan" : "uit",
+           *kef ? kef : "uit (toetsindeling)", *tv ? tv : "-", tv_activiteit);
 }
 
 inline void einrichten() {
