@@ -200,6 +200,16 @@ def validate_config(cfg: dict) -> dict:
         out_skins = validate_skins(cfg["skins"])
         if out_skins:
             out["skins"] = out_skins
+    # NOIR Airco (2026-11-22, esphomeremote-noir.h): MHI-codes en lamelstanden, aanpasbaar zonder firmware
+    if isinstance(cfg.get("noir_airco"), dict):
+        na, nao = cfg["noir_airco"], {}
+        for k, lo, hi in (("hi", 0, 15), ("eco", 0, 15), ("hor", 0, 8), ("ver", 0, 12), ("hor_sw", 0, 8),
+                          ("ver_sw", 0, 12), ("tmin", 16, 31), ("tmax", 16, 31), ("start", 1000, 6000)):
+            v = na.get(k)
+            if isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi:
+                nao[k] = v
+        if nao:
+            out["noir_airco"] = nao
     if "menu" in cfg:
         out["menu"] = validate_menu(cfg["menu"])
     if isinstance(cfg.get("home"), dict):

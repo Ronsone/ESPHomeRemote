@@ -2102,6 +2102,13 @@ class EsphomeremoteKonfigurator extends HTMLElement {
       j[t.dataset.jz] = t.type === "checkbox" ? t.checked : t.value;
       this._jetztSpeichern(); return;
     }
+    if (t.dataset.nairco) {   // NOIR Airco-instellingen (cfg.noir_airco, 2026-11-22)
+      const a = (this.cfg.noir_airco ||= {});
+      const v = parseInt(t.value, 10);
+      if (Number.isFinite(v)) a[t.dataset.nairco] = v; else delete a[t.dataset.nairco];
+      if (!Object.keys(a).length) delete this.cfg.noir_airco;
+      this._touch(); return this._render();
+    }
     if (t.dataset.bgr != null) {
       // Begruessungstext (cfg.begruessung, 2026-10-20) - leer = "Hallo <Name>"
       const v = t.value.trim().slice(0, 40);
@@ -7466,6 +7473,12 @@ const EinstTab = {
           <li><b>Symbole</b>: alle aus der Symbolauswahl des Menüs; dazu <code>noir:tv</code>, <code>noir:audio</code>, <code>noir:licht</code>, <code>noir:scenes</code> für die NOIR-Linienzeichen.</li>
         </ul>
         <small class="note">Die Seite „noir“ erscheint auch in der Liste des Menü-Editors; im normalen Menü der Remote wird sie nur angezeigt, wenn du irgendwo auf sie verlinkst.</small>
+        <h3><ha-icon icon="mdi:air-conditioner"></ha-icon> NOIR Airco (Mitsubishi Heavy, IR)</h3>
+        <p>Feinabstimmung des Infrarot-Signals – <b>ohne neue Firmware</b>. Leer = Standard (getestet mit RLA502A704A).</p>
+        <div class="noirairco">${[["hi", "HI POWER Code", 9, 0, 15], ["eco", "ECO Code", 6, 0, 15], ["tmin", "Temperatur min", 18, 16, 31], ["tmax", "Temperatur max", 30, 16, 31],
+          ["hor", "Lamellen horizontal (ohne Swing)", 3, 0, 8], ["ver", "Lamellen vertikal (ohne Swing)", 6, 0, 12], ["hor_sw", "Horizontal bei Swing", 0, 0, 8], ["ver_sw", "Vertikal bei Swing", 0, 0, 12],
+          ["start", "Startimpuls (µs)", 3200, 1000, 6000]].map(([k, l, d, mi, ma]) =>
+          `<label class="inl">${l} <input type="number" min="${mi}" max="${ma}" placeholder="${d}" value="${this.cfg.noir_airco?.[k] ?? ""}" data-nairco="${k}" style="width:6em"></label>`).join("<br>")}</div>
         <h3><ha-icon icon="mdi:lightbulb-outline"></ha-icon> NOIR Verlichting</h3>
         <p>Lampen für den Bildschirm Verlichting (Antippen = an/aus, lange drücken = dimmen). ${this._noirLicht() ? `${(this._noirLicht().items || []).filter((i) => i.entity).length} Lampe(n) eingestellt.` : "Noch keine Liste – es gilt <code>noir_lampen</code> aus der YAML."}</p>
         <div class="inl">

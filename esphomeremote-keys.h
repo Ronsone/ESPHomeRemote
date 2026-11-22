@@ -1183,6 +1183,7 @@ inline void noir_starten(bool aan, const char *kef, const char *licht, const cha
   noir::thema_laden(noir_ui_skin->value(), noir_ui_wall->value(), noir_ui_radius->value());
   noir::st().items = []() { return noir_items(); };
   // NOIR Airco (2026-11-22): IR-frame via de gewone IR-stap (zelf/dock/HA-blaster), stand bewaard in een global
+  noir::airco::inst_laden(tk_cfg->wurzel()["noir_airco"]);   // instellingen uit de configurator
   noir::airco::uitpakken(noir_airco_stand->value());
   noir::airco::zender() = [](const std::string &j) { tk_cfg->ir_test(j); };
   noir::airco::opslaan() = [](int v) { noir_airco_stand->value() = v; };
@@ -1321,6 +1322,8 @@ inline void einrichten() {
     }
     noir::thuis_herbouwen(noir_items());   // NOIR-builder: tegels uit de configurator (2026-11-22)
     noir_lampen_laden();                    // NOIR Verlichting: pagina "noir_licht" uit de configurator
+    noir::airco::inst_laden(tk_cfg->wurzel()["noir_airco"]);   // NOIR Airco: instellingen uit de configurator
+    noir::airco::tonen();
     noir::licht_herbouwen();
     akzent_anwenden->execute();   // vor dem Neuaufbau: neue Teile holen akzent::farbe()
     apply_activity->execute();

@@ -3720,5 +3720,15 @@
  "Lampen bearbeiten": "Edit lamps",
  "Lampenliste anlegen": "Create lamp list",
  "Liste löschen": "Delete list",
- "NOIR: Airco (Mitsubishi Heavy, Infrarot)": "NOIR: Air conditioner (Mitsubishi Heavy, infrared)"
+ "NOIR: Airco (Mitsubishi Heavy, Infrarot)": "NOIR: Air conditioner (Mitsubishi Heavy, infrared)",
+ "Feinabstimmung des Infrarot-Signals – <b>ohne neue Firmware</b>. Leer = Standard (getestet mit RLA502A704A).": "Fine-tune the infrared signal – <b>no new firmware</b>. Empty = default (tested with RLA502A704A).",
+ "HI POWER Code": "HI POWER code",
+ "ECO Code": "ECO code",
+ "Temperatur min": "Temperature min",
+ "Temperatur max": "Temperature max",
+ "Lamellen horizontal (ohne Swing)": "Vanes horizontal (no swing)",
+ "Lamellen vertikal (ohne Swing)": "Vanes vertical (no swing)",
+ "Horizontal bei Swing": "Horizontal with swing",
+ "Vertikal bei Swing": "Vertical with swing",
+ "Startimpuls (µs)": "Start pulse (µs)"
 }

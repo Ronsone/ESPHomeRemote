@@ -736,7 +736,31 @@ static const char *MODUS_NAAM[5] = {"Auto", "Koel", "Droog", "Fan", "Warm"};
 static const char *MODUS_LANG[5] = {"Automatisch", "Koelen", "Ontvochtigen", "Ventileren", "Verwarmen"};
 static const char *FAN_NAAM[7] = {"Auto", "1", "2", "3", "4", "HI", "Eco"};
 static const char *SWING_NAAM[4] = {"Uit", "Op/neer", "Links/rechts", "Alles"};
-static const int TEMP_MIN = 18, TEMP_MAX = 30;
+static const int TEMP_MIN = 16, TEMP_MAX = 31;   // grenzen van het protocol; het bereik zelf staat in inst()
+
+// Instellingen uit de configurator (cfg.noir_airco, 2026-11-22) - aanpassen zonder te compileren.
+// Standaard = getest op de SRK..ZS met RLA502A704A.
+struct Inst {
+  int hi{9}, eco{6};          // fan-code van HI POWER en ECONO
+  int hor{3}, ver{6};         // lamelstand zonder swing (horizontaal 0-8, verticaal 0-12)
+  int hor_sw{0}, ver_sw{0};   // lamelstand bij swing
+  int tmin{18}, tmax{30};     // temperatuurbereik
+  int start{3200};            // startpuls in us
+};
+inline Inst &inst() { static Inst i; return i; }
+inline void inst_laden(JsonObjectConst o) {
+  Inst n;
+  if (!o.isNull()) {
+    auto lees = [&](const char *k, int &v, int lo, int hi) { if (o[k].is<int>()) v = std::max(lo, std::min(hi, (int) o[k])); };
+    lees("hi", n.hi, 0, 15); lees("eco", n.eco, 0, 15);
+    lees("hor", n.hor, 0, 8); lees("ver", n.ver, 0, 12);
+    lees("hor_sw", n.hor_sw, 0, 8); lees("ver_sw", n.ver_sw, 0, 12);
+    lees("tmin", n.tmin, TEMP_MIN, TEMP_MAX); lees("tmax", n.tmax, TEMP_MIN, TEMP_MAX);
+    lees("start", n.start, 1000, 6000);
+    if (n.tmax < n.tmin) std::swap(n.tmin, n.tmax);
+  }
+  inst() = n;
+}
 
 inline std::function<void(const std::string &)> &zender() { static std::function<void(const std::string &)> z; return z; }   // IR-stap (JSON)
 inline std::function<void(int)> &opslaan() { static std::function<void(int)> z; return z; }
@@ -750,7 +774,7 @@ inline void uitpakken(int v) {
   Stand &s = st_();
   s.aan = v & 1;
   s.modus = std::min(4, (v >> 1) & 7);
-  s.temp = std::max(TEMP_MIN, std::min(TEMP_MAX, ((v >> 4) & 31) + 16));
+  s.temp = std::max(inst().tmin, std::min(inst().tmax, ((v >> 4) & 31) + 16));
   s.fan = std::min(6, (v >> 9) & 7);
   s.fan_normaal = std::min(4, s.fan);
   s.swing = (v >> 12) & 3;
@@ -765,10 +789,10 @@ inline std::string bits() {
   const Stand &s = st_();
   std::string b = "0100101001110101110000110101100010100111";   // kop
   b += paar_(lsb_(s.modus, 3) + (s.aan ? "1" : "0") + "0000");
-  b += paar_(lsb_(std::max(TEMP_MIN, std::min(TEMP_MAX, s.temp)) - 17, 4) + "0000");
-  b += paar_(lsb_(s.fan <= 4 ? s.fan : s.fan == 5 ? 9 : 6, 4) + "0000");   // HI = 9, ECO = 6 (getest 2026-11-22; de decodering had ze andersom)
+  b += paar_(lsb_(std::max(TEMP_MIN, std::min(TEMP_MAX, s.temp)) - 17, 4) + "0000");   // codeert 17 + 0..15
+  b += paar_(lsb_(s.fan <= 4 ? s.fan : s.fan == 5 ? inst().hi : inst().eco, 4) + "0000");   // standaard HI = 9, ECO = 6 (getest)
   // lamellen: horizontaal 0 = zwenken, 3 = midden; verticaal 0 = zwenken, 6 = midden
-  const int hor = (s.swing & 2) ? 0 : 3, ver = (s.swing & 1) ? 0 : 6;
+  const int hor = (s.swing & 2) ? inst().hor_sw : inst().hor, ver = (s.swing & 1) ? inst().ver_sw : inst().ver;
   const std::string paneel = lsb_(hor, 4) + lsb_(ver, 4);
   b += paar_("00000" + paneel.substr(5));   // 3D-auto uit
   b += paar_(paneel);
@@ -777,7 +801,7 @@ inline std::string bits() {
 }
 // IR-stap voor tasten_konfig (zelfde sendweg als de andere IR-knoppen: zelf, dock of HA-blaster)
 inline std::string ir_json() {
-  std::string j = "{\"t\":\"ir\",\"f\":38000,\"raw\":[3200,-1600";
+  std::string j = "{\"t\":\"ir\",\"f\":38000,\"raw\":[" + std::to_string(inst().start) + ",-1600";
   for (char c : bits()) { j += ",400,"; j += c == '1' ? "-1200" : "-430"; }
   j += ",400]}";
   return j;
@@ -838,7 +862,7 @@ inline void tonen() {
 // Acties (AIRCO_* in Actie)
 inline void temp_stap(int d) {
   Stand &s = st_();
-  s.temp = std::max(TEMP_MIN, std::min(TEMP_MAX, s.temp + d));
+  s.temp = std::max(inst().tmin, std::min(inst().tmax, s.temp + d));
   if (!s.aan) s.aan = true;
   tonen();
   sturen();
