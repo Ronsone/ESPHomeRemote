@@ -1201,6 +1201,10 @@ inline void noir_actie(int a) {
     case noir::ZOEK_SPATIE: noir::audio::zoek_spatie(); break;
     case noir::ZOEK_GA: noir::audio::zoek_ga(); break;
     case noir::ZOEK_VELD: noir::audio::zoek_veld_tik(); break;
+    case noir::ZOEK_INVOER: noir::audio::invoer_wissel(); break;
+    case noir::WIEL_GROEP: noir::audio::wiel_groep(-1); break;
+    case noir::WIEL_CIJFERS: noir::audio::wiel_groep(2); break;
+    case noir::WIEL_TEKENS: noir::audio::wiel_groep(3); break;
     case noir::LICHT:   // eigen NOIR-scherm met lampen; zonder lampen de menupagina zoals voorheen
       if (!noir::lampen().empty() || noir_licht_seite().empty()) noir::zeigen_seite(noir::S_LICHT);
       else noir_menupagina(noir_licht_seite());

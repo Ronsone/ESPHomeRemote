@@ -86,6 +86,7 @@ enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, S
                    AUDIO_SPOTIFY = 107, AUDIO_AANUIT = 189, SP_SHUFFLE = 187, SP_REPEAT = 188,
                    ZOEK_OPEN = 108, ZOEK_WIS = 190, ZOEK_SPATIE = 191, ZOEK_GA = 192, ZOEK_VELD = 193,
                    ZOEK_TOETS = 5000 /* +i: letter i van het toetsenbord */, ZOEK_RES = 5100 /* +i: zoekresultaat */,
+                   ZOEK_INVOER = 194, WIEL_GROEP = 195, WIEL_CIJFERS = 196, WIEL_TEKENS = 197,
                    AUDIO_BRON = 4600 /* 4600+i: KEF-ingang */, SP_LIJST = 4700 /* +i playlist */, SP_RECENT = 4800 /* +i */, SP_APPARAAT = 4900 /* +i */,
                    NF_TITEL = 3200 /* 3200 + lijst*100 + i: lijst 0 Top 10, 1 Populair, 2 Laatst gestart */,
                    SCENE = 3000 /* 3000+i: scène i van de configuratorpagina "noir_scenes" */,
@@ -1550,6 +1551,8 @@ struct Data {
   std::vector<Lijst> playlists, recent, apparaten, zoek;
   std::string zoek_tekst;
   bool zoek_bezig{false}, zoek_toetsen{true};   // zoek_toetsen = toetsenbord zichtbaar (anders de resultaten groot)
+  int invoer{0};                                // 0 letterwiel, 1 QWERTY
+  int wiel_groep{0}, wiel_pos{0};               // letterwiel: tekenset (abc/ABC/123/#+=) en gekozen teken
   std::map<int, Beeld> covers;
   std::vector<std::pair<lv_obj_t *, int>> wacht;   // beeldobjecten per cover-sleutel
   std::string cover_van_titel;                      // titel waarvoor de hoes is gevraagd
@@ -1862,6 +1865,26 @@ inline void zoek_toets(int i) {
   x.zoek_tekst += (char) tolower(LETTERS[i]);
   zoek_veld_();
 }
+// Letterwiel (zoals het wiel in de NOIR-bouwgids): pijlen draaien, OK zet het teken, Terug wist
+static const char *WIEL_SET[4] = {"abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "0123456789", ".,!?@-_:/+()#&'"};
+static const char *WIEL_NAAM[4] = {"abc", "ABC", "123", "#+="};
+inline void wiel_tonen_();   // verderop
+inline int wiel_n_() { return (int) strlen(WIEL_SET[d().wiel_groep]); }
+inline char wiel_teken_(int delta = 0) { const int n = wiel_n_(); return WIEL_SET[d().wiel_groep][((d().wiel_pos + delta) % n + n) % n]; }
+inline void wiel_stap(int delta) { const int n = wiel_n_(); d().wiel_pos = ((d().wiel_pos + delta) % n + n) % n; wiel_tonen_(); }
+inline void wiel_groep(int g) {
+  Data &x = d();
+  if (g == -1) g = x.wiel_groep == 0 ? 1 : 0;   // abc <-> ABC
+  if (g < 0 || g > 3) return;
+  if (x.wiel_groep != g) { x.wiel_groep = g; x.wiel_pos = 0; }
+  zoek_herbouwen();
+}
+inline void wiel_zet() {
+  Data &x = d();
+  if (x.zoek_tekst.size() >= 40) return;
+  x.zoek_tekst += wiel_teken_();
+  zoek_veld_();
+}
 inline void zoek_spatie() { Data &x = d(); if (!x.zoek_tekst.empty() && x.zoek_tekst.back() != ' ') { x.zoek_tekst += ' '; zoek_veld_(); } }
 inline void zoek_wis() { Data &x = d(); if (!x.zoek_tekst.empty()) { x.zoek_tekst.pop_back(); zoek_veld_(); } }
 inline void zoek_ga() {
@@ -1876,6 +1899,7 @@ inline void zoek_ga() {
   zoek_veld_();
 }
 inline void zoek_veld_tik() { d().zoek_toetsen = !d().zoek_toetsen || d().zoek.empty(); zoek_herbouwen(); }
+inline void invoer_wissel() { d().invoer = 1 - d().invoer; d().zoek_toetsen = true; zoek_herbouwen(); }
 inline void zoek_spelen(int i) {
   Data &x = d();
   if (i < 0 || i >= (int) x.zoek.size() || x.spotify.empty() || !ha()) return;
@@ -2325,11 +2349,26 @@ inline void audio::zoek_veld_() {
   else if (x.zoek_toetsen) t += "|";
   lv_label_set_text(l, t.empty() ? "|" : t.c_str());
 }
+struct WielUi { lv_obj_t *l[5]{}; };
+inline WielUi &wiel_ui() { static WielUi w; return w; }
+inline void audio::wiel_tonen_() {
+  WielUi &w = wiel_ui();
+  for (int i = 0; i < 5; i++) {
+    if (w.l[i] == nullptr || !lv_obj_is_valid(w.l[i])) return;
+    const char t[2] = {wiel_teken_(i - 2), 0};
+    lv_label_set_text(w.l[i], t);
+  }
+}
 inline void zoek_bouwen(lv_obj_t *laag, const Fonts &f) {
   Stand &s = st();
+  wiel_ui() = WielUi();
   audio::Data &x = audio::d();
   lv_obj_t *body = s.zoek_body = body_maken(laag, false);
   groen_label_(body, "Zoeken", 0, 0, 110, f.f16 != nullptr ? f.f16 : f.f14);
+  if (x.zoek_toetsen) {   // wisselen tussen letterwiel en QWERTY
+    lv_obj_t *w = tekst_knop_(body, 134, -2, 82, 24, ZOEK_INVOER, x.invoer == 0 ? "QWERTY" : "Letterwiel", f);
+    lv_obj_set_style_radius(w, 8, 0);
+  }
   lv_obj_t *veld = knop(body, 0, 26, 216, 32, ZOEK_VELD);
   lv_obj_set_style_bg_color(veld, k(SURF2), 0);
   zoek_veld_lbl() = label(veld, "", 10, 0, 196, f.f14 != nullptr ? f.f14 : f.f12, TEXT);
@@ -2353,7 +2392,67 @@ inline void zoek_bouwen(lv_obj_t *laag, const Fonts &f) {
     label(b, x.zoek[i].naam.c_str(), 46, 5, 162, f.f12, TEXT);
     label(b, x.zoek[i].sub.c_str(), 46, 22, 162, f.f12, MUTED);
   }
-  if (x.zoek_toetsen) {
+  if (x.zoek_toetsen && x.invoer == 0) {
+    // Letterwiel: links tekenset/spatie/wis, midden het wiel (5 tekens, midden groot), rechts 123/#+=/Zoek
+    const int ky = 122, bh = 32, st2 = 36;
+    auto kn = [&](int x0, int y0, int actie, const char *t, bool sel) {
+      lv_obj_t *b = tekst_knop_(body, x0, y0, 58, bh, actie, t, f);
+      if (sel) { lv_obj_set_style_border_color(b, k(0xBFC2C9), 0); lv_obj_set_style_border_opa(b, 200, 0); }
+      return b;
+    };
+    kn(0, ky, WIEL_GROEP, audio::WIEL_NAAM[x.wiel_groep < 2 ? x.wiel_groep : 0], x.wiel_groep < 2);
+    kn(0, ky + st2, ZOEK_SPATIE, "Spatie", false);
+    kn(0, ky + 2 * st2, ZOEK_WIS, "Wis", false);
+    kn(158, ky, WIEL_CIJFERS, "123", x.wiel_groep == 2);
+    kn(158, ky + st2, WIEL_TEKENS, "#+=", x.wiel_groep == 3);
+    lv_obj_t *ga = kn(158, ky + 2 * st2, ZOEK_GA, "Zoek", false);
+    lv_obj_set_style_bg_color(ga, lv_color_hex(SPOTIFY_GROEN), 0);
+    lv_obj_set_style_bg_grad_color(ga, lv_color_hex(0x169C46), 0);
+    lv_obj_add_flag(ga, LV_OBJ_FLAG_USER_4);
+    lv_obj_t *gl = lv_obj_get_child(ga, -1);
+    if (gl != nullptr) { lv_obj_set_style_text_color(gl, lv_color_hex(0x0B0D10), 0); lv_obj_add_flag(gl, LV_OBJ_FLAG_USER_4); }
+    // het wiel
+    lv_obj_t *w = lv_obj_create(body);
+    lv_obj_remove_style_all(w);
+    lv_obj_set_pos(w, 66, ky - 2);
+    lv_obj_set_size(w, 84, 3 * st2 - 2);
+    lv_obj_set_style_bg_color(w, k(SURF), 0);
+    lv_obj_set_style_bg_opa(w, 200, 0);
+    lv_obj_set_style_radius(w, rnd(13), 0);
+    lv_obj_set_style_border_width(w, 1, 0);
+    lv_obj_set_style_border_color(w, k(RAND), 0);
+    lv_obj_set_style_border_opa(w, 115, 0);
+    lv_obj_remove_flag(w, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(w, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *band = detail(w, 4, (3 * st2 - 2) / 2 - 15, 76, 30, 0xBFC2C9, 38, 8);
+    (void) band;
+    WielUi &wu = wiel_ui();
+    const int mid = (3 * st2 - 2) / 2;
+    const int dy[5] = {-44, -24, 0, 24, 44};
+    for (int i = 0; i < 5; i++) {
+      const lv_font_t *fo = i == 2 ? (f.f20 != nullptr ? f.f20 : f.f16) : (i == 1 || i == 3 ? f.f14 : f.f12);
+      lv_obj_t *l = label(w, "", 0, 0, 84, fo, i == 2 ? TEXT : MUTED);
+      lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+      lv_obj_set_style_text_opa(l, i == 2 ? 255 : (i == 1 || i == 3 ? 170 : 90), 0);
+      lv_obj_align(l, LV_ALIGN_TOP_MID, 0, mid + dy[i] - lv_font_get_line_height(fo) / 2);
+      wu.l[i] = l;
+    }
+    // vegen draait, tikken zet het teken
+    lv_obj_add_event_cb(w, [](lv_event_t *e) {
+      static int32_t start_y = 0, gedraaid = 0;
+      lv_indev_t *in = lv_indev_active();
+      lv_point_t pt;
+      if (in == nullptr) return;
+      lv_indev_get_point(in, &pt);
+      const lv_event_code_t c = lv_event_get_code(e);
+      if (c == LV_EVENT_PRESSED) { start_y = pt.y; gedraaid = 0; }
+      else if (c == LV_EVENT_PRESSING) {
+        const int stappen = (pt.y - start_y) / 18;
+        if (stappen != 0) { audio::wiel_stap(-stappen); start_y += stappen * 18; gedraaid += stappen; }
+      } else if (c == LV_EVENT_RELEASED && gedraaid == 0) audio::wiel_zet();
+    }, LV_EVENT_ALL, nullptr);
+    audio::wiel_tonen_();
+  } else if (x.zoek_toetsen) {
     // QWERTY: 10 / 9 / 7 + wissen, dan spatie en Zoek
     const int kh = 26, stap = 28, ky = 122;
     auto toets = [&](int x0, int y0, int w, int actie, const char *t) {
@@ -2654,7 +2753,29 @@ inline bool taste(int t, bool ingedrukt, bool op_home) {
 
 // NOIR Audio/Spotify: mediatoetsen naar de Spotify-speler (2 play/pauze, 5 stop, 4 vorige, 11 volgende).
 // Volume blijft bij kef::taste (die komt eerder in on_key).
+inline bool zoek_taste(int t, bool ingedrukt) {
+  if (!st().zichtbaar || st().seite != S_ZOEK) return false;
+  audio::Data &x = audio::d();
+  const bool wiel = x.invoer == 0 && x.zoek_toetsen;
+  if (t == 13) {   // Terug: eerst tekst wissen, leeg = gewoon terug
+    if (x.zoek_tekst.empty()) return false;
+    if (ingedrukt) { audio::zoek_wis(); halten_start(t, []() { audio::zoek_wis(); }); } else halten_los(t);
+    return true;
+  }
+  if (t == 2) { if (ingedrukt) audio::zoek_ga(); return true; }   // play-toets = Zoek
+  if (!wiel) return false;
+  if (t == 14 || t == 35) {   // omhoog/omlaag draait het wiel (vasthouden = doordraaien)
+    const int dlt = t == 14 ? -1 : 1;
+    if (ingedrukt) { audio::wiel_stap(dlt); halten_start(t, [dlt]() { audio::wiel_stap(dlt); }); } else halten_los(t);
+    return true;
+  }
+  if (!ingedrukt) return t == 15 || t == 32 || t == 34;
+  if (t == 34) { audio::wiel_zet(); return true; }                                   // OK = teken zetten
+  if (t == 15 || t == 32) { audio::wiel_groep((x.wiel_groep + (t == 32 ? 1 : 3)) % 4); return true; }   // links/rechts = tekenset
+  return false;
+}
 inline bool audio_taste(int t, bool ingedrukt) {
+  if (zoek_taste(t, ingedrukt)) return true;
   if (!op_audio() || audio::d().spotify.empty() || !ha()) return false;
   if (t != 2 && t != 5 && t != 4 && t != 11) return false;
   if (!ingedrukt) return true;
