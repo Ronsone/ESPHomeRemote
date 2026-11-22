@@ -2396,16 +2396,26 @@ interval:
   - interval: 20s
     then:
       - lambda: |-
-          static uint32_t ohne_ha = 0, letzter = 0;
+          static uint32_t ohne_ha = 0, letzter = 0, anker_ms = 0;
           const uint32_t jetzt = millis();
           // HA-Link absichtlich pausiert (Ruhezustand, ha_link_ruhe): kein Notfall
-          if (api::global_api_server->is_connected_with_state_subscription() || id(kb).funk_aus() || id(kb).link_paused()) { ohne_ha = 0; return; }
+          if (api::global_api_server->is_connected_with_state_subscription() || id(kb).funk_aus() || id(kb).link_paused()) { ohne_ha = 0; anker_ms = 0; return; }
           // Dock als Zentrale (2026-10-24): hat das Dock in den letzten 3 min geantwortet, erreicht HA die Remote ueber
           // das Dock - kein Notfall. Sonst oeffnete der Notanker nachts alle 10-60 min das WLAN (Akku, Schlaf-Uhr neu).
-          if (id(ha_dock) > 0 && id(direkt).ok_ms() != 0 && jetzt - id(direkt).ok_ms() < 180000) { ohne_ha = 0; return; }
+          if (id(ha_dock) > 0 && id(direkt).ok_ms() != 0 && jetzt - id(direkt).ok_ms() < 180000) { ohne_ha = 0; anker_ms = 0; return; }
           if (ohne_ha == 0) { ohne_ha = jetzt | 1; return; }
+          // Laatste redmiddel (2026-11-22): heeft de Notanker het WLAN niet terug gekregen (na 4 min nog steeds geen
+          // WLAN-verbinding), dan herstarten - zonder dock was de remote anders tot opnieuw flashen onbereikbaar.
+          // Alleen bij geen WLAN: ligt HA zelf eruit (WLAN wel verbonden), dan niet steeds herstarten.
+          if (anker_ms != 0 && jetzt - anker_ms > 240000 && !wifi::global_wifi_component->is_connected()) {
+            weck_log("WLAN na Notanker nog weg - herstart");
+            ESP_LOGW("wlan", "WLAN na de Notanker nog steeds weg - herstart");
+            App.safe_reboot();
+            return;
+          }
           if (jetzt - ohne_ha < 180000 || (letzter != 0 && jetzt - letzter < 600000) || jetzt < id(wartung_bis)) return;
           letzter = jetzt;
+          anker_ms = jetzt | 1;
           weck_log("HA 3 min weg - WLAN-Notanker");
           wlan_zugriff::fenster(180, "Notanker");
           id(wartungsfenster)->execute();
