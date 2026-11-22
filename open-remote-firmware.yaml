@@ -2257,7 +2257,8 @@ interval:
           vorige = millis();
           auto nu = id(sntp_time).now();
           noir::status(nu.is_valid() ? nu.hour : -1, nu.is_valid() ? nu.minute : 0, id(akku_pct), id(laedt),
-                       api::global_api_server != nullptr && api::global_api_server->is_connected());
+                       api::global_api_server != nullptr && api::global_api_server->is_connected(),
+                       wifi::global_wifi_component->is_connected() ? (int) wifi::global_wifi_component->wifi_rssi() : 0);   // wifi-streepjes
           noir::tv_status(id(noir_tv_state).state, id(noir_tv_bron).state);
   # Durchsage per WLAN (esphomeremote-durchsage.h, 2026-11-09): Antworten von HA anzeigen, am Ende Mikrofon aus -
   # wie on_voice_event der Bluetooth-Schicht

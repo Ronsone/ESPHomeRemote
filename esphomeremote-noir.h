@@ -120,6 +120,7 @@ struct Stand {
   lv_obj_t *tv{nullptr};                    // NOIR TV (2026-11-21)
   lv_obj_t *kop{nullptr};                   // statusbalk, hangt aan de zichtbare laag
   lv_obj_t *klok{nullptr}, *batt_txt{nullptr}, *batt_fill{nullptr}, *ha_dot{nullptr};
+  lv_obj_t *wifi[4]{};                      // wifi-streepjes in de statusbalk (2026-11-22)
   lv_obj_t *tv_status{nullptr};
   lv_obj_t *thuis_body{nullptr};            // tegels van NOIR Thuis (opnieuw opgebouwd bij nieuwe configuratie)
   Fonts fonts;                              // voor het herbouwen
@@ -291,6 +292,7 @@ inline void kop_maken(lv_obj_t *ouder, const Fonts &f) {
   s.batt_txt = label(kop, "", 151, 7, 31, f.f12, STAT);
   lv_obj_set_style_text_align(s.batt_txt, LV_TEXT_ALIGN_RIGHT, 0);
   s.ha_dot = detail(kop, 143, 11, 3, 3, DOT, 45, LV_RADIUS_CIRCLE);
+  for (int i = 0; i < 4; i++) s.wifi[i] = detail(kop, 122 + i * 4, 16 - i * 2, 2, 4 + i * 2, STAT, 45, 0);   // 4 streepjes, onder gelijk
   lv_obj_t *bat = detail(kop, 192, 9, 25, 11, 0x08090B, 100, 3);
   lv_obj_set_style_border_width(bat, 1, 0);
   lv_obj_set_style_border_color(bat, k(BATT), 0);
@@ -1799,7 +1801,8 @@ inline void tv_status(const std::string &state, const std::string &bron) {
 inline bool tv_aan() { return st().tv_state == "on" || st().tv_state == "playing" || st().tv_state == "paused" || st().tv_state == "idle"; }
 
 // Statusbalk bijwerken (elke seconde vanuit de firmware). pct < 0 = onbekend.
-inline void status(int uu, int mm, int pct, bool laden, bool ha) {
+// rssi: wifi-signaal in dBm, 0 = geen wifi-verbinding (streepjes dof, eerste rood)
+inline void status(int uu, int mm, int pct, bool laden, bool ha, int rssi = -50) {
   Stand &s = st();
   if (s.kop == nullptr || !s.zichtbaar) return;
   char t[16];
@@ -1811,6 +1814,12 @@ inline void status(int uu, int mm, int pct, bool laden, bool ha) {
   lv_obj_set_width(s.batt_fill, w);
   lv_obj_set_style_bg_color(s.batt_fill, k(laden ? 0xF2F3F5 : BATT_F), 0);
   lv_obj_set_style_bg_opa(s.ha_dot, ha ? 220 : 45, 0);
+  const int n = rssi >= 0 ? 0 : rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
+  for (int i = 0; i < 4; i++) {
+    if (s.wifi[i] == nullptr) continue;
+    lv_obj_set_style_bg_color(s.wifi[i], k(n == 0 && i == 0 ? 0xE5484D : STAT), 0);
+    lv_obj_set_style_bg_opa(s.wifi[i], n == 0 ? (i == 0 ? 230 : 45) : (i < n ? 220 : 45), 0);
+  }
 }
 
 // Korte melding bovenaan (verdwijnt vanzelf na ms). Eigen label op lv_layer_top - de pil van de firmware
