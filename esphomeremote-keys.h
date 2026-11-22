@@ -702,7 +702,7 @@ inline void intern(const char *fn, int arg, const Ctx &c) {
   else if (!strcmp(fn, "noir_airco")) noir_actie(noir::AIRCO);    // NOIR Airco (MHI via IR)
   else if (!strcmp(fn, "noir_test")) noir_actie(noir::KNOPTEST);  // NOIR Knoppentest
   else if (!strcmp(fn, "noir_scenes")) noir_actie(noir::SCENES);  // NOIR Scènes
-  else if (!strcmp(fn, "noir_alles_uit")) noir_alles_uit();       // NOIR: alles uit (lampen, tv, KEF, airco)
+  else if (!strcmp(fn, "noir_alles_uit")) noir_actie(noir::SCENE_ALLES_UIT);// NOIR: alles uit (lampen, tv, KEF, airco)
   else if (!strcmp(fn, "skin")) skin_waehlen(arg);
   else if (!strcmp(fn, "mic_toggle")) toggle_mic->execute();
   else if (!strcmp(fn, "clean")) clean_run->execute();
