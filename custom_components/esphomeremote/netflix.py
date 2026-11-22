@@ -149,15 +149,22 @@ class NetflixData:
             kop["Authorization"] = f"Bearer {self.sleutel}"
         else:                        # v3 "API Key"
             params["api_key"] = self.sleutel
-        try:
-            async with sessie.get(f"{TMDB}{pad}", params=params, headers=kop, timeout=15) as r:
-                if r.status != 200:
-                    _LOGGER.warning("TMDB %s: HTTP %s", pad, r.status)
-                    return None
-                return await r.json()
-        except (asyncio.TimeoutError, OSError) as err:
-            _LOGGER.warning("TMDB %s: %s", pad, err)
-            return None
+        for poging in range(3):
+            await asyncio.sleep(0.3)   # TMDB: ~40 vragen per 10 s
+            try:
+                async with sessie.get(f"{TMDB}{pad}", params=params, headers=kop, timeout=15) as r:
+                    if r.status == 429:   # te snel: even wachten en opnieuw
+                        await asyncio.sleep(2 + 3 * poging)
+                        continue
+                    if r.status != 200:
+                        _LOGGER.warning("TMDB %s: HTTP %s", pad, r.status)
+                        return None
+                    return await r.json()
+            except (asyncio.TimeoutError, OSError) as err:
+                _LOGGER.warning("TMDB %s: %s", pad, err)
+                return None
+        _LOGGER.warning("TMDB %s: te veel vragen (429)", pad)
+        return None
 
     async def _genres(self) -> None:
         if self.genres:
@@ -326,8 +333,13 @@ class NetflixData:
             self.beelden.move_to_end(sleutel)
             return self.beelden[sleutel]
         paden = self.paden.get(tmdb_id)
+        if not paden and self.sleutel:   # beeldpad onbekend (details mislukten eerder): nu ophalen
+            d = await self._tmdb(f"/tv/{tmdb_id}", language=TAAL)
+            if d:
+                paden = self.paden[tmdb_id] = (d.get("poster_path") or "", d.get("backdrop_path") or "")
         pad = (paden[0] if soort == "p" else paden[1]) if paden else ""
         if not pad:
+            _LOGGER.debug("Netflix-beeld %s/%s: geen pad bij TMDB", tmdb_id, soort)
             return None
         sessie = async_get_clientsession(self.hass)
         try:

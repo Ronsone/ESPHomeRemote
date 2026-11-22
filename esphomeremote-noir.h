@@ -1232,6 +1232,7 @@ inline void klaar_() {
     x.bezig = false;
     if (a.status == 200 && a.buf != nullptr && a.len > 0) {
       x.week.clear(); x.top10.clear(); x.populair.clear();
+      x.gevraagd.clear();   // posters die eerder mislukten (404, time-out) bij nieuwe lijsten opnieuw vragen
       const char *p = (const char *) a.buf, *eind = p + a.len;
       while (p < eind) {
         const char *e = (const char *) memchr(p, '\n', eind - p);
