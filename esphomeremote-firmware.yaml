@@ -1880,7 +1880,7 @@ image:
   - platform: file
     id: noir_wall
     file: images/noir/obsidian.png
-    type: GRAYSCALE
+    type: RGB565   # niet GRAYSCALE: ESPHome geeft LVGL dat als A8 (alleen alfa) - onzichtbaar/niet getekend
   - platform: file
     id: noir_ico_tv
     file: images/noir/home_tv.png
