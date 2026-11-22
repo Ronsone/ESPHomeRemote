@@ -1130,7 +1130,12 @@ inline void noir_actie(int a) {
     case noir::AIRCO_FAN: noir::airco::fan_volgende(); break;
     case noir::AIRCO_SWING: noir::airco::swing_volgende(); break;
     case noir::INSTELLINGEN: noir::zeigen_seite(noir::S_INST); break;   // NOIR UI-instellingen (simulator 13)
-    case noir::INST_REMOTE: open_menu_top->execute(); break;              // het volledige Aggro600-menu
+    case noir::INST_REMOTE:   // Aggro600-instellingen: menupagina "settings", anders het menu
+      ESP_LOGI("noir", "Remote-instellingen: menu %s, pagina settings %s", mn->aktiv() ? "aan" : "UIT",
+               mn->hat_seite("settings") ? "ja" : "nee");
+      if (mn->aktiv() && mn->hat_seite("settings")) noir_menupagina("settings");
+      else open_menu->execute();
+      break;
     case noir::INST_AFRONDING: {                                          // 8 -> 20 px in stappen van 2
       noir::Thema &t = noir::thema();
       t.radius = t.radius >= 20 ? 8 : t.radius + 2;

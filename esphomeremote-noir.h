@@ -983,7 +983,7 @@ inline void keuze_open_(lv_event_t *e) {
 // Knop "Naam  v" die de keuzelijst opent (in plaats van een dropdown)
 inline lv_obj_t *keuzelijst_(lv_obj_t *body, int y, int soort, const Fonts &f) {
   const char *naam = soort == 0 ? SKIN_NAMEN[thema().skin] : WALL_NAMEN[thema().wall];
-  lv_obj_t *b = knop(body, 0, y, 216, 37, -1);
+  lv_obj_t *b = knop(body, 0, y, 216, 34, -1);
   lv_obj_add_event_cb(b, keuze_open_, LV_EVENT_CLICKED, (void *) (intptr_t) soort);
   lv_obj_t *l = label(b, naam, 12, 0, 170, f.f12, TEXT);
   lv_obj_align(l, LV_ALIGN_LEFT_MID, 12, 0);
@@ -1002,18 +1002,18 @@ inline void knop_tekst_(lv_obj_t *b, const char *t, const Fonts &f) {
   lv_obj_center(l);
 }
 inline void inst_bouwen(lv_obj_t *laag, const Fonts &f) {
-  lv_obj_t *body = body_maken(laag, true);
+  // 2026-11-22: alles past zonder scrollen in de 230 px hoge body (de onderste knop verdween onder Terug/Thuis)
+  lv_obj_t *body = body_maken(laag, false);
   const Thema &t = thema();
   label(body, "UI-instellingen", 0, 0, 216, f.f20 != nullptr ? f.f20 : f.f16, TEXT);
-  label(body, "Skin", 0, 39, 216, f.f12, MUTED);
-  keuzelijst_(body, 58, 0, f);
-  label(body, "Wallpaper", 0, 111, 216, f.f12, MUTED);
-  keuzelijst_(body, 130, 1, f);
+  label(body, "Skin", 0, 32, 216, f.f12, MUTED);
+  keuzelijst_(body, 50, 0, f);
+  label(body, "Wallpaper", 0, 92, 216, f.f12, MUTED);
+  keuzelijst_(body, 110, 1, f);
   char r[32];
   snprintf(r, sizeof(r), "Afronding  %d px", t.radius);
-  knop_tekst_(knop(body, 0, 183, 216, 36, INST_AFRONDING), r, f);
-  label(body, "Remote", 0, 242, 216, f.f12, MUTED);
-  knop_tekst_(knop(body, 0, 262, 216, 36, INST_REMOTE), "Alle instellingen (menu)", f);
+  knop_tekst_(knop(body, 0, 152, 216, 34, INST_AFRONDING), r, f);
+  knop_tekst_(knop(body, 0, 194, 216, 34, INST_REMOTE), "Remote-instellingen", f);
 }
 
 // Lagen over page_home bouwen (eenmalig). home = page_home->obj.
