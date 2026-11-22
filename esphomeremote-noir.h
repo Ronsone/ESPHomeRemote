@@ -46,8 +46,8 @@ struct Thema {
 };
 inline Thema &thema() { static Thema t; return t; }
 static const int SKINS = 5, WALLS = 3;
-static const char *SKIN_NAMEN = "NOIR / Obsidian\nSIGNATURE / Graphite\nPURE / Black\nNautisch / Navy\nEigen (Aggro600-skin)";
-static const char *WALL_NAMEN = "Obsidian / satijn\nGraphite / zacht\nEffen";
+static const char *SKIN_NAMEN[5] = {"NOIR / Obsidian", "SIGNATURE / Graphite", "PURE / Black", "Nautisch / Navy", "Eigen (Aggro600-skin)"};
+static const char *WALL_NAMEN[3] = {"Obsidian / satijn", "Graphite / zacht", "Effen"};
 // bg, surf, text, accent - radius - wallpaper (simulator preset_colors / preset_radii)
 static const uint32_t SKIN_KLEUR[4][4] = {{0x07080A, 0x1A1C20, 0xF2F3F5, 0xBFC2C9}, {0x0C0E12, 0x20242B, 0xF2F3F5, 0xD4D9E2},
                                           {0x000000, 0x111214, 0xF5F5F5, 0xCCCCCC}, {0x071322, 0x14283A, 0xF5EEDC, 0xD6AB61}};
@@ -753,57 +753,82 @@ inline void skin_kiezen(int nr) {
 // Aggro600-skin gewisseld: bij "Eigen" volgt NOIR
 inline void eigen_gewisseld() { if (thema().skin == 4) alles_herbouwen(); }
 
-inline void inst_keuze_(lv_event_t *e) {
-  const int soort = (int) (intptr_t) lv_event_get_user_data(e);
-  const int v = lv_dropdown_get_selected((lv_obj_t *) lv_event_get_target(e));
+// Keuzelijst (2026-11-22): de firmware bouwt LVGL zonder lv_dropdown - daarom een eigen lijst van knoppen over
+// het scherm (lv_layer_top), in NOIR-stijl. soort 0 = skin, 1 = wallpaper.
+struct Keuze { lv_obj_t *over{nullptr}; int soort{0}; };
+inline Keuze &keuze() { static Keuze k; return k; }
+inline void keuze_dicht() {
+  Keuze &kz = keuze();
+  if (kz.over != nullptr) { lv_obj_delete_async(kz.over); kz.over = nullptr; }
+}
+inline void keuze_gekozen_(lv_event_t *e) {
+  const int v = (int) (intptr_t) lv_event_get_user_data(e);
+  const int soort = keuze().soort;
+  keuze_dicht();
+  if (v < 0) return;   // achtergrond: annuleren
   if (soort == 0) { if (v != thema().skin) skin_kiezen(v); return; }
   if (v == thema().wall) return;
   thema().wall = std::max(0, std::min(WALLS - 1, v));
   thema_bewaren_();
   alles_herbouwen();
 }
-inline lv_obj_t *keuzelijst_(lv_obj_t *body, const char *opties, int y, int gekozen, int soort, const Fonts &f) {
-  lv_obj_t *d = lv_dropdown_create(body);
-  lv_obj_set_pos(d, 0, y);
-  lv_obj_set_size(d, 216, 37);
-  lv_dropdown_set_options(d, opties);
-  lv_dropdown_set_selected(d, gekozen);
-  if (f.f12 != nullptr) lv_obj_set_style_text_font(d, f.f12, 0);
-  lv_obj_set_style_bg_color(d, k(SURF), 0);
-  lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(d, rnd(10), 0);
-  lv_obj_set_style_border_width(d, 1, 0);
-  lv_obj_set_style_border_color(d, k(RAND), 0);
-  lv_obj_set_style_border_opa(d, LV_OPA_60, 0);
-  lv_obj_set_style_shadow_width(d, 0, 0);
-  lv_obj_set_style_outline_width(d, 0, LV_STATE_FOCUSED);
-  lv_obj_set_style_pad_left(d, 10, 0);
-  lv_obj_set_style_pad_right(d, 10, 0);
-  lv_obj_set_style_pad_top(d, 10, 0);
-  lv_obj_set_style_text_color(d, k(TEXT), 0);
-  if (f.ico != nullptr) {   // pijltje uit de MDI-font (Inter heeft geen LVGL-symbolen)
-    static const char *PIJL = "\U000F0140";   // mdi:chevron-down
-    lv_dropdown_set_symbol(d, PIJL);
-    lv_obj_set_style_text_font(d, f.ico, LV_PART_INDICATOR);
-    lv_obj_set_style_text_color(d, k(MUTED), LV_PART_INDICATOR);
-  }
-  lv_obj_add_event_cb(d, inst_keuze_, LV_EVENT_VALUE_CHANGED, (void *) (intptr_t) soort);
-  lv_obj_t *lijst = lv_dropdown_get_list(d);
-  if (lijst != nullptr) {
-    lv_obj_add_flag(lijst, LV_OBJ_FLAG_USER_4);   // hangt aan het scherm, niet aan de laag
-    if (f.f12 != nullptr) lv_obj_set_style_text_font(lijst, f.f12, 0);
-    lv_obj_set_style_bg_color(lijst, k(0x14161A), 0);
-    lv_obj_set_style_bg_opa(lijst, LV_OPA_COVER, 0);
-    lv_obj_set_style_text_color(lijst, k(TEXT), 0);
-    lv_obj_set_style_border_color(lijst, k(RAND), 0);
-    lv_obj_set_style_radius(lijst, rnd(10), 0);
-    const lv_state_t st_[] = {LV_STATE_DEFAULT, LV_STATE_CHECKED, LV_STATE_PRESSED, (lv_state_t) (LV_STATE_CHECKED | LV_STATE_PRESSED)};
-    for (lv_state_t z : st_) {
-      lv_obj_set_style_bg_color(lijst, lv_color_hex(mix(thema().bg, thema().accent, 24)), (lv_style_selector_t) (LV_PART_SELECTED | z));
-      lv_obj_set_style_text_color(lijst, k(TEXT), (lv_style_selector_t) (LV_PART_SELECTED | z));
+inline void keuze_open_(lv_event_t *e) {
+  const int soort = (int) (intptr_t) lv_event_get_user_data(e);
+  Keuze &kz = keuze();
+  if (kz.over != nullptr) return;
+  const Fonts &f = st().fonts;
+  const char *const *namen = soort == 0 ? SKIN_NAMEN : WALL_NAMEN;
+  const int n = soort == 0 ? SKINS : WALLS, gekozen = soort == 0 ? thema().skin : thema().wall;
+  kz.soort = soort;
+  kz.over = lv_obj_create(lv_layer_top());
+  lv_obj_remove_style_all(kz.over);
+  lv_obj_add_flag(kz.over, LV_OBJ_FLAG_USER_4);
+  lv_obj_set_size(kz.over, 240, 320);
+  lv_obj_set_style_bg_color(kz.over, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(kz.over, 175, 0);
+  lv_obj_add_flag(kz.over, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_remove_flag(kz.over, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_event_cb(kz.over, keuze_gekozen_, LV_EVENT_CLICKED, (void *) (intptr_t) -1);
+  const int h = 16 + 22 + n * 42 + 8;
+  lv_obj_t *m = lv_obj_create(kz.over);
+  lv_obj_set_size(m, 208, h);
+  lv_obj_align(m, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_bg_color(m, k(SURF), 0);
+  lv_obj_set_style_bg_opa(m, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(m, rnd(16), 0);
+  lv_obj_set_style_border_width(m, 1, 0);
+  lv_obj_set_style_border_color(m, k(RAND), 0);
+  lv_obj_set_style_border_opa(m, LV_OPA_60, 0);
+  lv_obj_set_style_pad_all(m, 0, 0);
+  lv_obj_set_style_shadow_width(m, 0, 0);
+  lv_obj_remove_flag(m, LV_OBJ_FLAG_SCROLLABLE);
+  label(m, soort == 0 ? "Skin" : "Wallpaper", 14, 12, 180, f.f12, MUTED);
+  for (int i = 0; i < n; i++) {
+    lv_obj_t *b = knop(m, 8, 34 + i * 42, 192, 36, -1);
+    lv_obj_add_event_cb(b, keuze_gekozen_, LV_EVENT_CLICKED, (void *) (intptr_t) i);
+    lv_obj_t *l = label(b, namen[i], 12, 0, 168, f.f12, 0xE4E7EC);
+    lv_obj_align(l, LV_ALIGN_LEFT_MID, 12, 0);
+    if (i == gekozen) {   // huidige keuze: lichte rand
+      lv_obj_set_style_border_color(b, k(0xBFC2C9), 0);
+      lv_obj_set_style_border_opa(b, 200, 0);
     }
   }
-  return d;
+}
+// Knop "Naam  v" die de keuzelijst opent (in plaats van een dropdown)
+inline lv_obj_t *keuzelijst_(lv_obj_t *body, int y, int soort, const Fonts &f) {
+  const char *naam = soort == 0 ? SKIN_NAMEN[thema().skin] : WALL_NAMEN[thema().wall];
+  lv_obj_t *b = knop(body, 0, y, 216, 37, -1);
+  lv_obj_add_event_cb(b, keuze_open_, LV_EVENT_CLICKED, (void *) (intptr_t) soort);
+  lv_obj_t *l = label(b, naam, 12, 0, 170, f.f12, TEXT);
+  lv_obj_align(l, LV_ALIGN_LEFT_MID, 12, 0);
+  if (f.ico != nullptr) {
+    lv_obj_t *p = lv_label_create(b);
+    lv_label_set_text(p, "\U000F0140");   // mdi:chevron-down
+    lv_obj_set_style_text_font(p, f.ico, 0);
+    lv_obj_set_style_text_color(p, k(MUTED), 0);
+    lv_obj_align(p, LV_ALIGN_RIGHT_MID, -10, 0);
+  }
+  return b;
 }
 inline void knop_tekst_(lv_obj_t *b, const char *t, const Fonts &f) {
   lv_obj_t *l = label(b, t, 0, 0, lv_obj_get_style_width(b, LV_PART_MAIN) - 10, f.f12, 0xE4E7EC);
@@ -815,9 +840,9 @@ inline void inst_bouwen(lv_obj_t *laag, const Fonts &f) {
   const Thema &t = thema();
   label(body, "UI-instellingen", 0, 0, 216, f.f20 != nullptr ? f.f20 : f.f16, TEXT);
   label(body, "Skin", 0, 39, 216, f.f12, MUTED);
-  keuzelijst_(body, SKIN_NAMEN, 58, t.skin, 0, f);
+  keuzelijst_(body, 58, 0, f);
   label(body, "Wallpaper", 0, 111, 216, f.f12, MUTED);
-  keuzelijst_(body, WALL_NAMEN, 130, t.wall, 1, f);
+  keuzelijst_(body, 130, 1, f);
   char r[32];
   snprintf(r, sizeof(r), "Afronding  %d px", t.radius);
   knop_tekst_(knop(body, 0, 183, 216, 36, INST_AFRONDING), r, f);
@@ -917,6 +942,7 @@ inline void alles_herbouwen() {
     if (s.laag == nullptr || s.home == nullptr) return;
     thema_kleuren_();   // "Eigen": kleuren van de Aggro600-skin zoals die nu is
     dimmer_dicht();
+    keuze_dicht();
     const bool zicht = s.zichtbaar;
     const int seite = s.seite;
     lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst};
