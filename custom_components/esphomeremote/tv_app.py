@@ -60,7 +60,7 @@ def registrieren(hass: HomeAssistant) -> None:
         payload = {"id": app}
         if content.strip():
             payload["contentId"] = content.strip()
-        _LOGGER.debug("tv_app: %s %s", ent, payload)
+        _LOGGER.info("tv_app: %s %s", ent, payload)
         await hass.services.async_call("webostv", "command",
                                        {"entity_id": ent, "command": "system.launcher/launch", "payload": payload},
                                        blocking=False)

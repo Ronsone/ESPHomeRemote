@@ -1279,7 +1279,9 @@ inline void tik(uint32_t nu, bool zichtbaar) {
     const std::string u = url_("/netflix?", "&f=tsv");
     if (!u.empty()) {
       x.bezig = true;
-      x.volgende = nu + (x.geladen ? 3600000u : 30000u);
+      bool zonder = !x.geladen || x.top10.empty();   // nog niets of titels zonder TMDB: vaker vragen
+      for (auto &t : x.top10) if (t.id <= 0) zonder = true;
+      x.volgende = nu + (zonder ? 60000u : 3600000u);
       x.rij.insert(x.rij.begin(), {u, 0, 'j', 24 * 1024});
     }
   }

@@ -246,6 +246,20 @@ class NetflixData:
                         lijst.append(await self._details(i, t) if i else {"i": 0, "n": t[:40], "z": t[:60]})
                     self.week, self.top10, veranderd = week, lijst, True
                     _LOGGER.info("Netflix Top 10 NL, week tot %s: %s", week, ", ".join(titels))
+            # Top 10 opgehaald zonder (werkende) TMDB-sleutel: titels nu alsnog opzoeken (posters, teksten)
+            if self.sleutel and any(not t.get("i") for t in self.top10):
+                lijst = []
+                for t in self.top10:
+                    if t.get("i"):
+                        lijst.append(t)
+                        continue
+                    naam = t.get("z") or t.get("n") or ""
+                    i = await self._zoeken(naam)
+                    lijst.append(await self._details(i, naam) if i else t)
+                if lijst != self.top10:
+                    self.top10, veranderd = lijst, True
+                _LOGGER.info("Netflix Top 10: %d van %d titels gevonden in TMDB",
+                             sum(1 for t in self.top10 if t.get("i")), len(self.top10))
             if self.sleutel and time.time() - self.pop_tijd > 20 * 3600:
                 await self._genres()
                 d = await self._tmdb("/discover/tv", with_watch_providers=NETFLIX_PROVIDER, watch_region=LAND,
