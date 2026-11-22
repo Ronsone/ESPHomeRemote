@@ -142,6 +142,38 @@ blaster_send:
         number:
           min: 1
           max: 30
+tv_app:
+  name: Start TV app (webOS)
+  description: "Starts an app on an LG webOS TV, optionally straight into a title (Netflix: title number or URL). Used by NOIR Netflix favourites."
+  fields:
+    app:
+      name: App
+      description: "webOS app id, e.g. netflix, youtube.leanback.v4, amazon"
+      required: true
+      example: netflix
+      selector:
+        text:
+    content:
+      name: Content
+      description: "Optional. Netflix: number from netflix.com/title/80057281 (or the whole URL). Other apps: contentId as is."
+      required: false
+      example: "80057281"
+      selector:
+        text:
+    search:
+      name: Search
+      description: "Optional, Netflix only (without content): opens Netflix search with this title."
+      required: false
+      selector:
+        text:
+    entity_id:
+      name: TV
+      description: "Optional. Empty = the first webostv media player."
+      required: false
+      selector:
+        entity:
+          domain: media_player
+
 light:
   name: Licht steuern (Licht-Widget)
   description: "Bedienung des Licht-Widgets der Remote: schaltet, dimmt, setzt Farbtemperatur oder Farbe je Lampe nur so weit, wie sie es kann, oder aktiviert eine Szene."

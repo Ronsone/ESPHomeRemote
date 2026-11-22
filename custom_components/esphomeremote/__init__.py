@@ -1361,8 +1361,21 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     await take_over(hass, entry)
     await _starten(hass, entry.data["key"], entry.options.get("devices", entry.data["devices"]))
 
+    # NOIR Netflix-dashboard (2026-11-22): Top 10 NL (Netflix Tudum) + Populair/posters (TMDB, sleutel in de opties)
+    from .netflix import NetflixBeeldView, NetflixData, NetflixView
+    if (nd := hass.data.get(DOMAIN + "_netflix")) is None:
+        nd = hass.data[DOMAIN + "_netflix"] = NetflixData(hass)
+        _kd = hass.data[DOMAIN]
+        hass.http.register_view(NetflixView(nd, lambda r: schluessel_ok(r, _kd.key)))
+        hass.http.register_view(NetflixBeeldView(nd, lambda r: schluessel_ok(r, _kd.key)))
+    await nd.starten(entry.options.get("tmdb_key", ""))
+
     async def geaendert(hass: HomeAssistant, e) -> None:
         kd: KonfigData = hass.data[DOMAIN]
+        nd_ = hass.data.get(DOMAIN + "_netflix")
+        if nd_ is not None and e.options.get("tmdb_key", "") != nd_.sleutel:   # nieuwe TMDB-sleutel: alles opnieuw
+            nd_.top10, nd_.populair, nd_.pop_tijd = [], [], 0.0
+            await nd_.starten(e.options.get("tmdb_key", ""))
         for dev in e.options.get("devices", []):
             if dev not in kd.devices:
                 await kd.geraet_dazu(dev)
@@ -1562,6 +1575,10 @@ async def _starten(hass: HomeAssistant, key: str, devices: list[str]) -> None:
     from .light_widget import registrieren as licht_registrieren
 
     licht_registrieren(hass)   # Licht-Widget (2026-10-29): Aktion esphomeremote.light
+
+    from .tv_app import registrieren as tv_app_registrieren
+
+    tv_app_registrieren(hass)   # NOIR Netflix (2026-11-22): Aktion esphomeremote.tv_app (webOS-app/deep link)
 
     from .errors import einrichten as fehler_einrichten
 

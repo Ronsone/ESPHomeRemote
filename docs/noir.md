@@ -68,6 +68,26 @@ activiteiten. Eigen scènes maak je zonder te compileren in de configurator (NOI
 `noir_scenes`); elke kachel voert zijn stappen uit (HA, IR, wachten, functies van de remote) of start zonder stappen
 een `scene.`- of `script.`-entiteit uit HA.
 
+## NOIR Netflix-dashboard
+
+De Netflix-tegel van het TV-scherm start Netflix en opent het dashboard (functie *NOIR: Netflix-Dashboard*):
+
+- **Top 10 in Nederland**: de officiele weeklijst van Netflix (Tudum, elke dinsdag nieuw), als posterrij met grote
+  rode rangnummers.
+- **Populair op Netflix**: TMDB discover (provider Netflix, regio NL), dagelijks.
+- **Laatst gestart**: de laatste 4 titels die je via de remote opende (global `noir_nf_laatst`).
+- Tik op een poster: detailscherm met achtergrond, jaar, genre, seizoenen, Kijkwijzer, Nederlandse tekst en
+  **Afspelen in Netflix** (actie `esphomeremote.tv_app` met `search`: Netflix opent op de naam - er is geen bron met
+  Netflix-nummers). Staat de tv uit, dan eerst de TV-activiteit en na 8 s openen.
+- Fysieke knoppen op deze schermen: play/pauze (`media_play_pause`), stop, terug-/vooruitspoelen (webOS `STOP`,
+  `REWIND`, `FASTFORWARD`), D-pad en OK. *Terug*: detail → dashboard → TV-scherm.
+
+De integratie (`netflix.py`) haalt alles op en levert het aan de remote via HA (`/api/esphomeremote/netflix`,
+posters als RGB565 64×96 en achtergrond 216×110 via `/api/esphomeremote/netflix/img`) - de remote zelf hoeft niet
+op internet. HA wel: `www.netflix.com`, `api.themoviedb.org`, `image.tmdb.org`. Posters, teksten en Populair
+vragen een gratis **TMDB-sleutel** (Instellingen → Apparaten & diensten → ESPHomeRemote → Configureren); zonder
+sleutel alleen de Top 10-titels. *This product uses the TMDB API but is not endorsed or certified by TMDB.*
+
 ## NOIR UI-instellingen
 
 Het tandwiel op NOIR Thuis opent *UI-instellingen* (simulator `build(13)`): **Skin** (NOIR / Obsidian, SIGNATURE /

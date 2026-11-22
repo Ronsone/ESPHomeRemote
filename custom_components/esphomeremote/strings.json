@@ -36,10 +36,12 @@
         "description": "Remote names (device_name, comma separated). Key for the ESPHome secrets: `{key}`",
         "data": {
           "devices": "Remotes (device_name)",
-          "kanal": "Firmware channel"
+          "kanal": "Firmware channel",
+          "tmdb_key": "TMDB API key (optional)"
         },
         "data_description": {
-          "kanal": "stabil: releases for everyone. beta: new versions a few days earlier, for testing – the device files are switched to the beta branch on GitHub, and HACS shows betas only if you enable \"Show beta versions\" for ESPHomeRemote."
+          "kanal": "stabil: releases for everyone. beta: new versions a few days earlier, for testing – the device files are switched to the beta branch on GitHub, and HACS shows betas only if you enable \"Show beta versions\" for ESPHomeRemote.",
+          "tmdb_key": "For the NOIR Netflix dashboard: posters, Dutch descriptions and \"Popular on Netflix\". Free at themoviedb.org → Settings → API (API Key v3 or Read Access Token). Without a key only the Netflix Top 10 titles are shown. This product uses the TMDB API but is not endorsed or certified by TMDB."
         }
       }
     }
@@ -274,6 +276,28 @@
         "position": {
           "name": "Position (this time only)",
           "description": "Optional – center, left, right, top, bottom or a corner. Empty = Configurator setting."
+        }
+      }
+    },
+    "tv_app": {
+      "name": "Start TV app (webOS)",
+      "description": "Starts an app on an LG webOS TV, optionally straight into a title (Netflix: title number or URL). Used by NOIR Netflix favourites.",
+      "fields": {
+        "app": {
+          "name": "App",
+          "description": "webOS app id, e.g. netflix, youtube.leanback.v4, amazon"
+        },
+        "content": {
+          "name": "Content",
+          "description": "Optional. Netflix: number from netflix.com/title/80057281 (or the whole URL). Other apps: contentId as is."
+        },
+        "entity_id": {
+          "name": "TV",
+          "description": "Optional. Empty = the first webostv media player."
+        },
+        "search": {
+          "name": "Search",
+          "description": "Optional, Netflix only (without content): opens Netflix search with this title."
         }
       }
     }

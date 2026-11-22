@@ -116,6 +116,7 @@ const INT_FNS = [
   ["noir_airco", "NOIR: Airco (Mitsubishi Heavy, Infrarot)"],
   ["noir_test", "NOIR: Tastentest (Steuerkreuz/OK)"],
   ["noir_scenes", "NOIR: Szenen-Bildschirm"],
+  ["noir_netflix", "NOIR: Netflix-Dashboard (Top 10, Beliebt)"],
   ["noir_alles_uit", "NOIR: Alles aus (Lampen, TV, KEF, Klima)"],
   ["mic_toggle", "Mikrofon an/aus"],
   ["clean", "Reinigungsmodus (Zurück lang beendet)"],
@@ -7504,6 +7505,13 @@ const EinstTab = {
           <li>Jede Kachel = eine Szene: <b>Name</b>, <b>Symbol</b> und <b>Schritte</b> – Home Assistant (z. B. <code>light.turn_on</code> mit Helligkeit), Infrarot, Warten, Funktionen der Remote (z. B. <i>NOIR: Alles aus</i>).</li>
           <li>Oder ohne Schritte nur eine <b>Entität</b>: <code>scene.…</code> oder <code>script.…</code> aus Home Assistant wird gestartet.</li>
           <li>Die Kachel <b>Scènes</b> auf NOIR Thuis braucht die Funktion <i>NOIR: Szenen-Bildschirm</i>.</li>
+        </ul>
+        <h3><ha-icon icon="mdi:netflix"></ha-icon> NOIR Netflix</h3>
+        <p>Die Netflix-Kachel des TV-Bildschirms öffnet ein Netflix-Dashboard: <b>Top 10 in den Niederlanden</b> (offizielle Wochenliste von Netflix), <b>Beliebt auf Netflix</b> und <b>Zuletzt gestartet</b> – als Posterreihen, Antippen = Details und „Afspelen in Netflix“. Play/Stop/Spulen der Remote steuern dort den TV.</p>
+        <ul class="noirhilfe">
+          <li>Poster, Beschreibungen und „Beliebt“ brauchen einen kostenlosen <b>TMDB-Schlüssel</b>: Einstellungen → Geräte &amp; Dienste → ESPHomeRemote → Konfigurieren. Ohne Schlüssel nur die Titel der Top 10.</li>
+          <li>Home Assistant braucht dafür Internet zu <code>www.netflix.com</code>, <code>api.themoviedb.org</code> und <code>image.tmdb.org</code>.</li>
+          <li>This product uses the TMDB API but is not endorsed or certified by TMDB.</li>
         </ul>
         <h3><ha-icon icon="mdi:air-conditioner"></ha-icon> NOIR Airco (Mitsubishi Heavy, IR)</h3>
         <p>Feinabstimmung des Infrarot-Signals – <b>ohne neue Firmware</b>. Leer = Standard (getestet mit RLA502A704A).</p>

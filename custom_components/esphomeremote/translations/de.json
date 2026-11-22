@@ -36,10 +36,12 @@
         "description": "Namen der Fernbedienungen (device_name, mehrere mit Komma). Schlüssel für die ESPHome-Secrets: `{key}`",
         "data": {
           "devices": "Fernbedienungen (device_name)",
-          "kanal": "Firmware-Kanal"
+          "kanal": "Firmware-Kanal",
+          "tmdb_key": "TMDB-API-Schlüssel (optional)"
         },
         "data_description": {
-          "kanal": "stabil: Releases für alle. beta: neue Versionen ein paar Tage früher, zum Testen – die Gerätedateien werden auf den Beta-Zweig von GitHub umgestellt, und HACS zeigt Betas nur, wenn du bei ESPHomeRemote „Beta-Versionen anzeigen“ einschaltest."
+          "kanal": "stabil: Releases für alle. beta: neue Versionen ein paar Tage früher, zum Testen – die Gerätedateien werden auf den Beta-Zweig von GitHub umgestellt, und HACS zeigt Betas nur, wenn du bei ESPHomeRemote „Beta-Versionen anzeigen“ einschaltest.",
+          "tmdb_key": "Für das NOIR-Netflix-Dashboard: Poster, Beschreibungen und „Beliebt auf Netflix“. Kostenlos bei themoviedb.org → Einstellungen → API (API-Key v3 oder Read Access Token). Ohne Schlüssel nur die Titel der Netflix-Top-10. Dieses Produkt nutzt die TMDB-API, ist aber nicht von TMDB unterstützt oder zertifiziert."
         }
       }
     }
@@ -274,6 +276,28 @@
         "position": {
           "name": "Lage (nur dieses Mal)",
           "description": "Optional – center, left, right, top, bottom oder eine Ecke. Leer = Einstellung im Konfigurator."
+        }
+      }
+    },
+    "tv_app": {
+      "name": "TV-App starten (webOS)",
+      "description": "Startet eine App auf einem LG-webOS-Fernseher, optional direkt mit einem Titel (Netflix: Titelnummer oder URL). Für die NOIR-Netflix-Favoriten.",
+      "fields": {
+        "app": {
+          "name": "App",
+          "description": "webOS-App-ID, z. B. netflix, youtube.leanback.v4, amazon"
+        },
+        "content": {
+          "name": "Inhalt",
+          "description": "Optional. Netflix: Nummer aus netflix.com/title/80057281 (oder die ganze URL). Andere Apps: contentId unverändert."
+        },
+        "entity_id": {
+          "name": "Fernseher",
+          "description": "Optional. Leer = der erste webostv-Mediaplayer."
+        },
+        "search": {
+          "name": "Suche",
+          "description": "Optional, nur Netflix (ohne Inhalt): öffnet die Netflix-Suche mit diesem Titel."
         }
       }
     }

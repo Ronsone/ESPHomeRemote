@@ -1630,6 +1630,7 @@ globals:
   - {id: noir_ui_wall,   type: int,       restore_value: true,  initial_value: "0"}    #   wallpaper 0-2
   - {id: noir_ui_radius, type: int,       restore_value: true,  initial_value: "16"}   #   afronding 8-20 px
   - {id: noir_airco_stand, type: int,     restore_value: true,  initial_value: "0"}    # NOIR Airco: laatst gestuurde stand (MHI-IR)
+  - {id: noir_nf_laatst, type: std::string, restore_value: true, max_restore_data_length: 254, initial_value: '""'}   # NOIR Netflix: laatst gestart (id<TAB>titel)
   - {id: sprache_ha_nl,  type: bool,      restore_value: true,  initial_value: "false"}   # HA ist Niederlaendisch (2026-11-20)
   - {id: sprache_ha_en,  type: bool,      restore_value: true,  initial_value: "false"}   # X-Knopf rechts (2026-11-01): Seitenkoepfe gespiegelt, Animationen andersherum
   - {id: gesten_sens,    type: int,       restore_value: true,  initial_value: "1"}
@@ -2248,6 +2249,7 @@ interval:
       - lambda: |-
           noir::kef::herhaal_tik(millis());
           noir::licht_http::tik(millis(), noir::op_licht() && id(cur_page) == 0 && !id(disp_off));   // NOIR Verlichting (2026-11-22)
+          noir::nf::tik(millis(), noir::op_netflix() && id(cur_page) == 0 && !id(disp_off));   // NOIR Netflix-dashboard
           static uint32_t vorige = 0;
           if (millis() - vorige < 1000) return;
           vorige = millis();

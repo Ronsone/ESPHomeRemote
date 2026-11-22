@@ -15,6 +15,7 @@
 // (dan geldt de toetsindeling zoals voorheen). Ingedrukt houden herhaalt elke 300 ms (hoogstens 30 x).
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 #ifdef ESP_PLATFORM
@@ -80,6 +81,8 @@ inline int rnd(int r) { return r >= 10 && r < LV_RADIUS_CIRCLE ? thema().radius 
 enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, SCENES = 104, AIRCO = 105, INSTELLINGEN = 113,
                    INST_AFRONDING = 129, INST_REMOTE = 130, DIM_GEREED = 128,
                    AIRCO_AANUIT = 140, AIRCO_MIN = 141, AIRCO_PLUS = 142, AIRCO_FAN = 143, AIRCO_SWING = 144, AIRCO_HI = 145, AIRCO_ECO = 146, KNOPTEST = 160, TEST_RESET = 161, SCENE_ALLES_UIT = 170,
+                   NETFLIX = 106, NF_AFSPELEN = 186,
+                   NF_TITEL = 3200 /* 3200 + lijst*100 + i: lijst 0 Top 10, 1 Populair, 2 Laatst gestart */,
                    SCENE = 3000 /* 3000+i: scène i van de configuratorpagina "noir_scenes" */,
                    AIRCO_MODUS = 150 /* 150-154 */,
                    LAMP = 400 /* 400+i: lamp i op NOIR Verlichting */,
@@ -110,7 +113,7 @@ struct Beelden {
   const void *app[6]{};   // PS5, Switch, Netflix, YouTube, Cookie IPTV (nullptr = tekst), Plex
 };
 
-enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_AIRCO = 4, S_TEST = 5, S_SCENES = 6, S_ANZ = 7 };
+enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_AIRCO = 4, S_TEST = 5, S_SCENES = 6, S_NETFLIX = 7, S_NF_DETAIL = 8, S_ANZ = 9 };
 
 struct Stand {
   lv_obj_t *laag{nullptr};                  // NOIR Thuis
@@ -130,6 +133,7 @@ struct Stand {
   // 2026-11-22: Verlichting en UI-instellingen, herbouwen na skinwissel
   lv_obj_t *licht{nullptr}, *inst{nullptr}, *licht_body{nullptr}, *airco{nullptr}, *test{nullptr}, *scenes{nullptr}, *scenes_body{nullptr};
   std::function<JsonArrayConst()> scenes_items;   // configuratorpagina "noir_scenes"
+  lv_obj_t *netflix{nullptr}, *netflix_body{nullptr}, *nfd_laag{nullptr}, *nfd_body{nullptr};   // NOIR Netflix (2026-11-22)
   lv_obj_t *home{nullptr};
   std::function<JsonArrayConst()> items;    // tegels van NOIR Thuis (configurator), voor het herbouwen
 };
@@ -1097,6 +1101,379 @@ inline void scenes_bouwen(lv_obj_t *laag, const Fonts &f, const Beelden &bl, Jso
   }
 }
 
+// ---- NOIR Netflix-dashboard (2026-11-22) -----------------------------------------------------------------------
+// Achter de Netflix-tegel van het TV-scherm. Posterrijen (horizontaal vegen): Top 10 in Nederland (officiele
+// weeklijst van Netflix), Populair op Netflix (TMDB, dagelijks) en Laatst gestart (de laatste 4 via de remote).
+// Tik = detailscherm met achtergrond, tekst en "Afspelen in Netflix". Alle gegevens en beelden komen van de
+// integratie (netflix.py) via HA (/api/esphomeremote/netflix...): de remote komt niet zelf op internet.
+// Bediening van de tv met de fysieke knoppen (play/pauze, stop, spoelen, D-pad, OK) - zie tv::taste.
+static const uint32_t NETFLIX_ROOD = 0xE50914;
+namespace nf {
+struct Titel { int id{0}; std::string naam, zoek, jaar, genre, leeftijd, tekst; int seizoenen{0}; };
+struct Beeld { uint8_t *px{nullptr}; lv_image_dsc_t dsc{}; };
+struct Wacht { lv_obj_t *img; int id; char soort; };
+struct Taak { std::string url; int id; char soort; size_t max; };   // soort 'j' json, 'p' poster, 'b' achtergrond
+struct Data {
+  std::string week;
+  std::vector<Titel> top10, populair, laatst;
+  bool geladen{false}, bezig{false};
+  uint32_t volgende{0};             // wanneer de lijsten opnieuw mogen
+  std::map<int, Beeld> posters;
+  Beeld achter; int achter_id{0};
+  std::vector<Wacht> wacht_dash, wacht_detail;   // beeld-objecten die op een download wachten
+  std::vector<Taak> rij;            // downloads
+  std::set<int> gevraagd;           // posters die al in de rij staan/stonden
+  Titel detail; int detail_plek{0}; // plek in de Top 10 (1-10), 0 = niet
+  std::function<void(const std::string &)> bewaar;   // laatst gestart -> global
+};
+inline Data &d() { static Data x; return x; }
+inline std::function<std::string()> &url_basis() { static std::function<std::string()> f; return f; }   // ".../states?k=.."
+
+// ---- downloads (eigen taak, een tegelijk) ----
+struct Abfrage { volatile bool laeuft{false}, fertig{false}; Taak taak; uint8_t *buf{nullptr}; size_t len{0}; int status{0};
+                 void *handle{nullptr}; };
+inline Abfrage &q() { static Abfrage x; return x; }
+#ifdef ESP_PLATFORM
+inline void einmal_() {
+  Abfrage &a = q();
+  esp_http_client_config_t cfg = {};
+  cfg.url = a.taak.url.c_str();
+  cfg.timeout_ms = 6000;
+  cfg.buffer_size = 1024;
+  cfg.buffer_size_tx = std::max<int>(512, (int) a.taak.url.size() + 256);
+  cfg.keep_alive_enable = false;
+  esp_http_client_handle_t c = esp_http_client_init(&cfg);
+  int status = -1;
+  size_t len = 0;
+  uint8_t *buf = nullptr;
+  if (c != nullptr && esp_http_client_open(c, 0) == ESP_OK) {
+    esp_http_client_fetch_headers(c);
+    status = esp_http_client_get_status_code(c);
+    if (status == 200) {
+      const size_t MAX = a.taak.max;
+      buf = (uint8_t *) heap_caps_malloc(MAX + 1, MALLOC_CAP_SPIRAM);
+      while (buf != nullptr && len < MAX) {
+        int r = esp_http_client_read(c, (char *) buf + len, MAX - len);
+        if (r <= 0) break;
+        len += r;
+      }
+    }
+  }
+  if (c != nullptr) { esp_http_client_close(c); esp_http_client_cleanup(c); }
+  a.buf = buf; a.len = len; a.status = status; a.fertig = true;
+}
+inline void taak_(void *) { for (;;) { ulTaskNotifyTake(pdTRUE, portMAX_DELAY); einmal_(); } }
+inline void starten_(const Taak &t) {
+  Abfrage &a = q();
+  if (a.handle == nullptr) {
+    static StaticTask_t tcb;
+    const size_t groesse = 4096;
+    auto *stapel = (StackType_t *) heap_caps_malloc(groesse, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (stapel != nullptr) a.handle = xTaskCreateStaticPinnedToCore(taak_, "noir_nf", groesse, nullptr, 1, stapel, &tcb, tskNO_AFFINITY);
+  }
+  if (a.handle == nullptr) return;
+  a.taak = t;
+  a.laeuft = true;
+  a.fertig = false;
+  xTaskNotifyGive((TaskHandle_t) a.handle);
+}
+inline void vrij_(void *p) { if (p != nullptr) heap_caps_free(p); }
+#else
+inline void starten_(const Taak &) {}
+inline void vrij_(void *p) { free(p); }
+#endif
+inline std::string url_(const char *pad, const std::string &extra) {
+  if (!url_basis()) return "";
+  std::string u = url_basis()();
+  const size_t p = u.find("/states?");
+  if (p == std::string::npos) return "";
+  return u.substr(0, p) + pad + u.substr(p + 8) + extra;   // ".../netflix?k=.." + extra
+}
+inline void beeld_vullen_(Beeld &b, uint8_t *px, int w, int h) {
+  b.px = px;
+  b.dsc = {};
+  b.dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+  b.dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+  b.dsc.header.w = w;
+  b.dsc.header.h = h;
+  b.dsc.header.stride = w * 2;
+  b.dsc.data_size = w * h * 2;
+  b.dsc.data = px;
+}
+inline void tonen_(std::vector<Wacht> &lijst, int id, char soort, const lv_image_dsc_t *dsc) {
+  for (auto &w : lijst)
+    if (w.id == id && w.soort == soort && w.img != nullptr) { lv_image_set_src(w.img, dsc); lv_obj_remove_flag(w.img, LV_OBJ_FLAG_HIDDEN); }
+}
+inline void poster_vragen(int id) {
+  Data &x = d();
+  if (id <= 0 || x.posters.count(id) || x.gevraagd.count(id)) return;
+  x.gevraagd.insert(id);
+  x.rij.push_back({url_("/netflix/img?", "&s=p&id=" + std::to_string(id)), id, 'p', 64 * 96 * 2});
+}
+inline void achter_vragen(int id) {
+  Data &x = d();
+  if (id <= 0 || x.achter_id == id) return;
+  x.rij.push_back({url_("/netflix/img?", "&s=b&id=" + std::to_string(id)), id, 'b', 216 * 110 * 2});
+}
+inline Titel titel_uit_(JsonObjectConst o) {
+  Titel t;
+  t.id = o["i"] | 0; t.naam = o["n"] | ""; t.zoek = o["z"] | t.naam.c_str(); t.jaar = o["j"] | "";
+  t.genre = o["g"] | ""; t.leeftijd = o["l"] | ""; t.tekst = o["o"] | ""; t.seizoenen = o["s"] | 0;
+  return t;
+}
+inline void herbouwen_();   // verderop (netflix_herbouwen)
+inline void klaar_() {
+  Abfrage &a = q();
+  Data &x = d();
+  const Taak t = a.taak;
+  if (t.soort == 'j') {
+    x.bezig = false;
+    if (a.status == 200 && a.buf != nullptr && a.len > 0) {
+      JsonDocument doc;
+      if (!deserializeJson(doc, (const char *) a.buf, a.len)) {
+        x.week = doc["w"] | "";
+        x.top10.clear(); x.populair.clear();
+        for (JsonObjectConst o : doc["t"].as<JsonArrayConst>()) x.top10.push_back(titel_uit_(o));
+        for (JsonObjectConst o : doc["p"].as<JsonArrayConst>()) x.populair.push_back(titel_uit_(o));
+        x.geladen = true;
+        herbouwen_();
+      }
+    }
+    vrij_(a.buf);
+  } else if (t.soort == 'p') {
+    if (a.status == 200 && a.buf != nullptr && a.len == t.max) {
+      Beeld &b = x.posters[t.id];
+      beeld_vullen_(b, a.buf, 64, 96);
+      tonen_(x.wacht_dash, t.id, 'p', &b.dsc);
+      tonen_(x.wacht_detail, t.id, 'p', &b.dsc);
+    } else vrij_(a.buf);
+  } else if (t.soort == 'b') {
+    if (a.status == 200 && a.buf != nullptr && a.len == t.max) {
+      vrij_(x.achter.px);
+      beeld_vullen_(x.achter, a.buf, 216, 110);
+      x.achter_id = t.id;
+      tonen_(x.wacht_detail, t.id, 'b', &x.achter.dsc);
+    } else vrij_(a.buf);
+  }
+  a.buf = nullptr; a.len = 0;
+}
+// Elke 100 ms (via licht_http::tik). zichtbaar = NOIR Netflix of het detailscherm staat open.
+inline void tik(uint32_t nu, bool zichtbaar) {
+  Abfrage &a = q();
+  Data &x = d();
+  if (a.fertig) { a.fertig = false; a.laeuft = false; klaar_(); }
+  if (zichtbaar && !x.bezig && (int32_t) (nu - x.volgende) >= 0) {   // lijsten: bij openen, daarna elk uur
+    const std::string u = url_("/netflix?", "");
+    if (!u.empty()) {
+      x.bezig = true;
+      x.volgende = nu + (x.geladen ? 3600000u : 30000u);
+      x.rij.insert(x.rij.begin(), {u, 0, 'j', 24 * 1024});
+    }
+  }
+  if (a.laeuft || x.rij.empty() || !zichtbaar) return;
+  Taak t = x.rij.front();
+  x.rij.erase(x.rij.begin());
+  if (t.url.empty()) { if (t.soort == 'j') x.bezig = false; return; }
+  starten_(t);
+}
+// Laatst gestart: "id\tzoeknaam\n" x4 (global van max. 254 tekens, overleeft herstarten)
+inline void laatst_laden(const std::string &s) {
+  Data &x = d();
+  x.laatst.clear();
+  size_t p = 0;
+  while (p < s.size() && x.laatst.size() < 4) {
+    size_t e = s.find('\n', p);
+    if (e == std::string::npos) e = s.size();
+    const std::string r = s.substr(p, e - p);
+    const size_t t1 = r.find('\t');
+    if (t1 != std::string::npos && t1 + 1 < r.size()) {
+      Titel t;
+      t.id = atoi(r.substr(0, t1).c_str()); t.zoek = r.substr(t1 + 1); t.naam = t.zoek;
+      x.laatst.push_back(t);
+    }
+    p = e + 1;
+  }
+}
+inline void laatst_toevoegen(const Titel &t) {
+  Data &x = d();
+  for (size_t i = 0; i < x.laatst.size(); i++)
+    if ((t.id > 0 && x.laatst[i].id == t.id) || x.laatst[i].zoek == t.zoek) { x.laatst.erase(x.laatst.begin() + i); break; }
+  x.laatst.insert(x.laatst.begin(), t);
+  if (x.laatst.size() > 4) x.laatst.resize(4);
+  std::string s;
+  for (auto &l : x.laatst) s += std::to_string(l.id) + "\t" + l.zoek.substr(0, 40) + "\n";
+  if (x.bewaar) x.bewaar(s);
+}
+// Titel bij een actie (lijst*100 + i); volledige gegevens uit Top 10/Populair als de laatst-gestart-regel kort is
+inline bool titel_van(int code, Titel &t, int &plek) {
+  Data &x = d();
+  const int lijst = code / 100, i = code % 100;
+  const std::vector<Titel> *v = lijst == 0 ? &x.top10 : lijst == 1 ? &x.populair : &x.laatst;
+  if (i < 0 || i >= (int) v->size()) return false;
+  t = (*v)[i];
+  plek = lijst == 0 ? i + 1 : 0;
+  if (lijst == 2) {
+    for (int k = 0; k < (int) x.top10.size(); k++) if (x.top10[k].id == t.id && t.id > 0) { t = x.top10[k]; plek = k + 1; }
+    if (plek == 0) for (auto &p : x.populair) if (p.id == t.id && t.id > 0) t = p;
+  }
+  return true;
+}
+}  // namespace nf
+
+inline lv_obj_t *rood_label_(lv_obj_t *p, const char *t, int x, int y, int w, const lv_font_t *f) {
+  lv_obj_t *l = label(p, t, x, y, w, f, NETFLIX_ROOD);
+  lv_obj_set_style_text_color(l, lv_color_hex(NETFLIX_ROOD), 0);   // merkkleur: niet door het thema laten omzetten
+  lv_obj_add_flag(l, LV_OBJ_FLAG_USER_4);
+  return l;
+}
+// Poster (64 x 96 of kleiner): titel als tekst tot het beeld binnen is (of zonder TMDB-sleutel blijft)
+inline lv_obj_t *nf_poster_(lv_obj_t *p, const nf::Titel &t, int x, int y, int w, int h, int actie, const Fonts &f,
+                            std::vector<nf::Wacht> &wacht) {
+  lv_obj_t *b = actie >= 0 ? knop(p, x, y, w, h, actie) : lv_obj_create(p);
+  if (actie < 0) { lv_obj_remove_style_all(b); lv_obj_set_pos(b, x, y); lv_obj_set_size(b, w, h);
+                   lv_obj_set_style_bg_color(b, k(SURF), 0); lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+                   lv_obj_remove_flag(b, (lv_obj_flag_t) (LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE)); }
+  lv_obj_set_style_radius(b, 8, 0);
+  lv_obj_set_style_clip_corner(b, true, 0);
+  lv_obj_add_flag(b, LV_OBJ_FLAG_SCROLL_CHAIN_HOR);   // vegen schuift de rij, niet de knop
+  lv_obj_t *l = label(b, t.naam.c_str(), 0, 0, w - 6, f.f12, TEXT2);
+  lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
+  lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_max_height(l, h - 8, 0);
+  lv_obj_center(l);
+  lv_obj_t *im = lv_image_create(b);
+  lv_obj_remove_flag(im, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_center(im);
+  if (w != 64) lv_image_set_scale(im, 256 * w / 64);
+  auto it = nf::d().posters.find(t.id);
+  if (it != nf::d().posters.end()) lv_image_set_src(im, &it->second.dsc);
+  else { lv_obj_add_flag(im, LV_OBJ_FLAG_HIDDEN); nf::poster_vragen(t.id); }
+  wacht.push_back({im, t.id, 'p'});
+  return b;
+}
+inline lv_obj_t *nf_rij_(lv_obj_t *body, int y, int h) {
+  lv_obj_t *r = lv_obj_create(body);
+  lv_obj_remove_style_all(r);
+  lv_obj_set_pos(r, 0, y);
+  lv_obj_set_size(r, 216, h);
+  lv_obj_set_scroll_dir(r, LV_DIR_HOR);
+  lv_obj_set_scrollbar_mode(r, LV_SCROLLBAR_MODE_OFF);
+  lv_obj_remove_flag(r, LV_OBJ_FLAG_SCROLL_ELASTIC);
+  return r;
+}
+inline void nf_kop_(lv_obj_t *body, int y, const char *l, const char *r, const Fonts &f) {
+  label(body, l, 0, y, 150, f.f14 != nullptr ? f.f14 : f.f12, TEXT);
+  if (r != nullptr && *r) {
+    lv_obj_t *m = label(body, r, 96, y + 2, 120, f.f12, MUTED);
+    lv_obj_set_style_text_align(m, LV_TEXT_ALIGN_RIGHT, 0);
+  }
+}
+inline void netflix_bouwen(lv_obj_t *laag, const Fonts &f) {
+  Stand &s = st();
+  nf::Data &x = nf::d();
+  x.wacht_dash.clear();
+  lv_obj_t *body = s.netflix_body = body_maken(laag, true);
+  rood_label_(body, "NETFLIX", 0, 0, 110, f.f20 != nullptr ? f.f20 : f.f16);
+  int y = 36;
+  // Top 10: groot rangnummer half achter de poster, zoals de Top 10-rij in de app
+  nf_kop_(body, y, "Top 10 in Nederland", x.week.c_str(), f);
+  y += 20;
+  if (x.top10.empty()) {
+    label(body, x.geladen ? "Nog geen lijst - kijk in de log van HA" : "Wordt geladen\xE2\x80\xA6", 0, y + 4, 216, f.f12, MUTED);
+    y += 30;
+  } else {
+    lv_obj_t *r = nf_rij_(body, y, 100);
+    const lv_font_t *groot = f.groot != nullptr ? f.groot : (f.f20 != nullptr ? f.f20 : f.f16);
+    const int gh = lv_font_get_line_height(groot);
+    for (int i = 0; i < (int) x.top10.size() && i < 10; i++) {
+      const int px = i * 92;
+      char nr[4];
+      snprintf(nr, sizeof(nr), "%d", i + 1);
+      lv_obj_t *n = rood_label_(r, nr, i == 9 ? px - 24 : px - 4, 98 - gh, i == 9 ? 58 : 38, groot);
+      lv_obj_set_style_text_align(n, LV_TEXT_ALIGN_RIGHT, 0);
+      nf_poster_(r, x.top10[i], px + 28, 2, 64, 96, NF_TITEL + i, f, x.wacht_dash);
+    }
+    y += 110;
+  }
+  if (!x.populair.empty()) {
+    nf_kop_(body, y, "Populair op Netflix", "vandaag", f);
+    lv_obj_t *r = nf_rij_(body, y + 20, 100);
+    for (int i = 0; i < (int) x.populair.size() && i < 10; i++)
+      nf_poster_(r, x.populair[i], i * 72, 2, 64, 96, NF_TITEL + 100 + i, f, x.wacht_dash);
+    y += 130;
+  }
+  nf_kop_(body, y, "Laatst gestart", nullptr, f);
+  if (x.laatst.empty()) {
+    lv_obj_t *h = label(body, "Tik op een titel en kies Afspelen, dan staat hij hier.", 0, y + 22, 216, f.f12, MUTED);
+    lv_label_set_long_mode(h, LV_LABEL_LONG_MODE_WRAP);
+  } else {
+    lv_obj_t *r = nf_rij_(body, y + 20, 100);
+    for (int i = 0; i < (int) x.laatst.size(); i++)
+      nf_poster_(r, x.laatst[i], i * 72, 2, 64, 96, NF_TITEL + 200 + i, f, x.wacht_dash);
+  }
+}
+// Detailscherm van de gekozen titel (nf::d().detail)
+inline void nf_detail_bouwen(lv_obj_t *laag, const Fonts &f) {
+  Stand &s = st();
+  nf::Data &x = nf::d();
+  x.wacht_detail.clear();
+  const nf::Titel &t = x.detail;
+  lv_obj_t *body = s.nfd_body = body_maken(laag, true);
+  lv_obj_t *bd = lv_obj_create(body);
+  lv_obj_remove_style_all(bd);
+  lv_obj_set_pos(bd, 0, 0);
+  lv_obj_set_size(bd, 216, 110);
+  lv_obj_set_style_radius(bd, 12, 0);
+  lv_obj_set_style_clip_corner(bd, true, 0);
+  lv_obj_set_style_bg_color(bd, k(SURF), 0);
+  lv_obj_set_style_bg_opa(bd, LV_OPA_COVER, 0);
+  lv_obj_remove_flag(bd, (lv_obj_flag_t) (LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+  lv_obj_t *im = lv_image_create(bd);
+  lv_obj_set_pos(im, 0, 0);
+  if (x.achter_id == t.id && x.achter.px != nullptr) lv_image_set_src(im, &x.achter.dsc);
+  else { lv_obj_add_flag(im, LV_OBJ_FLAG_HIDDEN); nf::achter_vragen(t.id); }
+  x.wacht_detail.push_back({im, t.id, 'b'});
+  nf_poster_(body, t, 8, 40, 48, 72, -1, f, x.wacht_detail);
+  if (x.detail_plek > 0) {
+    char p[24];
+    snprintf(p, sizeof(p), "#%d IN NEDERLAND", x.detail_plek);
+    rood_label_(body, p, 64, 58, 150, f.f12);
+  }
+  lv_obj_t *n = label(body, t.naam.c_str(), 64, 74, 150, f.f20 != nullptr ? f.f20 : f.f16, TEXT);
+  lv_label_set_long_mode(n, LV_LABEL_LONG_MODE_DOTS);
+  std::string meta = t.jaar;
+  auto plus = [&](const std::string &v) { if (!v.empty()) meta += (meta.empty() ? "" : " \xC2\xB7 ") + v; };
+  plus(t.genre);
+  if (t.seizoenen > 0) plus(std::to_string(t.seizoenen) + (t.seizoenen == 1 ? " seizoen" : " seizoenen"));
+  plus(t.leeftijd);
+  lv_obj_t *m = label(body, meta.c_str(), 0, 118, 216, f.f12, MUTED);
+  lv_label_set_long_mode(m, LV_LABEL_LONG_MODE_DOTS);
+  int y = 138;
+  if (!t.tekst.empty()) {
+    // drie regels, dan "..." - de knop blijft zo zonder scrollen in beeld
+    lv_obj_t *o = label(body, t.tekst.c_str(), 0, y, 216, f.f12, 0xC9CCD3);
+    lv_label_set_long_mode(o, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_height(o, 3 * lv_font_get_line_height(f.f12));
+    y += 3 * lv_font_get_line_height(f.f12) + 8;
+  }
+  lv_obj_t *b = knop(body, 0, y, 216, 38, NF_AFSPELEN);
+  lv_obj_set_style_bg_color(b, lv_color_hex(NETFLIX_ROOD), 0);
+  lv_obj_set_style_bg_grad_color(b, lv_color_hex(0xB20710), 0);
+  lv_obj_set_style_border_width(b, 0, 0);
+  lv_obj_add_flag(b, LV_OBJ_FLAG_USER_4);
+  if (f.ico != nullptr) {
+    lv_obj_t *pi = lv_label_create(b);
+    lv_label_set_text(pi, "\U000F040A");   // mdi:play
+    lv_obj_set_style_text_font(pi, f.ico, 0);
+    lv_obj_set_style_text_color(pi, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_align(pi, LV_ALIGN_CENTER, -78, 0);
+  }
+  lv_obj_t *bl = label(b, "Afspelen in Netflix", 0, 0, 170, f.f14 != nullptr ? f.f14 : f.f12, 0xFFFFFF);
+  lv_obj_set_style_text_color(bl, lv_color_hex(0xFFFFFF), 0);
+  lv_obj_add_flag(bl, LV_OBJ_FLAG_USER_4);
+  lv_obj_align(bl, LV_ALIGN_CENTER, 18, 0);
+}
+
 // ---- NOIR UI-instellingen (simulator build(13)) ----------------------------------------------------------------
 inline std::function<void(int, int, int)> &opslaan() { static std::function<void(int, int, int)> f; return f; }   // skin, wall, radius
 inline std::function<void(uint32_t *)> &eigen_kleuren() { static std::function<void(uint32_t *)> f; return f; }   // bg,surf,text,accent
@@ -1255,6 +1632,14 @@ inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl, JsonArrayC
   scenes_bouwen(s.scenes, f, bl, s.scenes_items ? s.scenes_items() : JsonArrayConst());
   onderknop(s.scenes, ICO_LINKS, "Terug", 12, TERUG, f);
   onderknop(s.scenes, ICO_HOME, "Thuis", 124, THUIS, f);
+  s.netflix = laag_maken(home, bl);
+  netflix_bouwen(s.netflix, f);
+  onderknop(s.netflix, ICO_LINKS, "Terug", 12, TERUG, f);
+  onderknop(s.netflix, ICO_HOME, "Thuis", 124, THUIS, f);
+  s.nfd_laag = laag_maken(home, bl);
+  nf_detail_bouwen(s.nfd_laag, f);
+  onderknop(s.nfd_laag, ICO_LINKS, "Terug", 12, TERUG, f);
+  onderknop(s.nfd_laag, ICO_HOME, "Thuis", 124, THUIS, f);
   s.test = laag_maken(home, bl);
   test_bouwen(s.test, f);
   onderknop(s.test, ICO_LINKS, "Terug", 12, TERUG, f);
@@ -1285,6 +1670,21 @@ inline void scenes_herbouwen() {
   Stand &s = st();
   body_vervangen_(s.scenes, s.scenes_body, [&]() { scenes_bouwen(s.scenes, s.fonts, s.beelden, s.scenes_items ? s.scenes_items() : JsonArrayConst()); });
 }
+// Nieuwe lijsten of laatst gestart: NOIR Netflix opnieuw (detail: nf_detail_tonen)
+inline void netflix_herbouwen() {
+  Stand &s = st();
+  body_vervangen_(s.netflix, s.netflix_body, [&]() { netflix_bouwen(s.netflix, s.fonts); });
+}
+inline void nf::herbouwen_() { netflix_herbouwen(); }
+// Detailscherm voor titel code (lijst*100 + i) opbouwen en tonen
+inline void zeigen_seite(int seite);
+inline void nf_detail_tonen(int code) {
+  Stand &s = st();
+  nf::Data &x = nf::d();
+  if (!nf::titel_van(code, x.detail, x.detail_plek)) return;
+  body_vervangen_(s.nfd_laag, s.nfd_body, [&]() { nf_detail_bouwen(s.nfd_laag, s.fonts); });
+  zeigen_seite(S_NF_DETAIL);
+}
 // Nieuwe lampenlijst (configurator): NOIR Verlichting opnieuw
 inline void licht_herbouwen() {
   Stand &s = st();
@@ -1294,7 +1694,7 @@ inline void licht_herbouwen() {
 
 inline lv_obj_t *laag_van(int seite) {
   Stand &s = st();
-  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : seite == S_AIRCO ? s.airco : seite == S_TEST ? s.test : seite == S_SCENES ? s.scenes : s.laag;
+  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : seite == S_AIRCO ? s.airco : seite == S_TEST ? s.test : seite == S_SCENES ? s.scenes : seite == S_NETFLIX ? s.netflix : seite == S_NF_DETAIL ? s.nfd_laag : s.laag;
 }
 
 // Een NOIR-pagina tonen (de andere verbergen); de statusbalk verhuist mee
@@ -1317,6 +1717,7 @@ inline bool op_tv() { return st().zichtbaar && st().seite == S_TV; }
 inline bool op_licht() { return st().zichtbaar && st().seite == S_LICHT; }
 inline bool op_airco() { return st().zichtbaar && st().seite == S_AIRCO; }
 inline bool op_test() { return st().zichtbaar && st().seite == S_TEST; }
+inline bool op_netflix() { return st().zichtbaar && (st().seite == S_NETFLIX || st().seite == S_NF_DETAIL); }
 
 // NOIR aan (laatst getoonde pagina) of helemaal weg (gewone Aggro600-startpagina zichtbaar)
 inline void zeigen(bool an) {
@@ -1343,9 +1744,9 @@ inline void alles_herbouwen() {
     keuze_dicht();
     const bool zicht = s.zichtbaar;
     const int seite = s.seite;
-    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst, s.airco, s.test, s.scenes};
+    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst, s.airco, s.test, s.scenes, s.netflix, s.nfd_laag};
     for (lv_obj_t *o : weg) if (o != nullptr) lv_obj_delete(o);   // kop hangt aan een ervan
-    s.laag = s.tv = s.licht = s.inst = s.airco = s.test = s.scenes = s.scenes_body = nullptr;
+    s.laag = s.tv = s.licht = s.inst = s.airco = s.test = s.scenes = s.scenes_body = s.netflix = s.netflix_body = s.nfd_laag = s.nfd_body = nullptr;
     for (auto &t : knoptest::st_().tegel) t = nullptr;
     knoptest::st_().info = nullptr;
     airco::ui() = airco::Ui();
@@ -1514,7 +1915,14 @@ inline bool airco_taste(int t, bool ingedrukt) {
 inline bool taste(int t, bool ingedrukt, bool op_home) {
   if (op_home && op_test()) return knoptest::taste(t, ingedrukt);   // NOIR Knoppentest: alles blijft op het scherm
   if (op_home && op_airco()) return airco_taste(t, ingedrukt);   // NOIR Airco: pijlen = temperatuur, OK = aan/uit
-  if (entiteit().empty() || !noir::ha() || !op_home || !op_tv()) return false;
+  if (entiteit().empty() || !noir::ha() || !op_home || !(op_tv() || op_netflix())) return false;   // ook op NOIR Netflix
+  // NOIR Netflix-dashboard: de mediatoetsen van de remote bedienen Netflix (2 play/pauze, 5 stop, 4/11 spoelen)
+  if (op_netflix() && (t == 2 || t == 5 || t == 4 || t == 11)) {
+    if (!ingedrukt) return true;
+    if (t == 2) noir::ha()("media_player.media_play_pause", {{"entity_id", entiteit()}});
+    else stuur(t == 5 ? "STOP" : t == 4 ? "REWIND" : "FASTFORWARD");
+    return true;
+  }
   const char *knop = knop_van(t);
   if (knop == nullptr) return false;
   if (!ingedrukt) { halten_los(t); return true; }

@@ -148,9 +148,11 @@ class Optionen(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         e = self.config_entry
         if user_input is not None:
-            return self.async_create_entry(data={"devices": _liste(user_input["devices"]), "kanal": user_input.get("kanal", "stabil")})
+            return self.async_create_entry(data={"devices": _liste(user_input["devices"]), "kanal": user_input.get("kanal", "stabil"),
+                                                 "tmdb_key": user_input.get("tmdb_key", "").strip()})
         jetzt = ", ".join(e.options.get("devices", e.data["devices"]))
         return self.async_show_form(step_id="init", data_schema=vol.Schema({
             vol.Required("devices", default=jetzt): str,
             vol.Required("kanal", default=e.options.get("kanal", "stabil")): vol.In(list(KANAELE)),
+            vol.Optional("tmdb_key", default=e.options.get("tmdb_key", "")): str,   # NOIR Netflix: posters/populair
         }), description_placeholders={"key": e.data["key"]})

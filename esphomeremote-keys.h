@@ -702,6 +702,7 @@ inline void intern(const char *fn, int arg, const Ctx &c) {
   else if (!strcmp(fn, "noir_airco")) noir_actie(noir::AIRCO);    // NOIR Airco (MHI via IR)
   else if (!strcmp(fn, "noir_test")) noir_actie(noir::KNOPTEST);  // NOIR Knoppentest
   else if (!strcmp(fn, "noir_scenes")) noir_actie(noir::SCENES);  // NOIR Scènes
+  else if (!strcmp(fn, "noir_netflix")) noir_actie(noir::NETFLIX);  // NOIR Netflix (bediening + favorieten)
   else if (!strcmp(fn, "noir_alles_uit")) noir_actie(noir::SCENE_ALLES_UIT);// NOIR: alles uit (lampen, tv, KEF, airco)
   else if (!strcmp(fn, "skin")) skin_waehlen(arg);
   else if (!strcmp(fn, "mic_toggle")) toggle_mic->execute();
@@ -1082,6 +1083,26 @@ inline void noir_scene(int index) {
   const char *naam = it["label"] | "";
   if (*naam) noir::toast(naam);
 }
+// NOIR Netflix-dashboard (2026-11-22): titel van het detailscherm in Netflix openen (zoeken op de naam - er is
+// geen Netflix-nummer) en bovenaan "Laatst gestart" zetten. Staat de tv uit: eerst de TV-activiteit, na 8 s openen.
+inline void noir_netflix_afspelen() {
+  const noir::nf::Titel t = noir::nf::d().detail;
+  if (t.zoek.empty()) return;
+  noir::nf::laatst_toevoegen(t);
+  noir::netflix_herbouwen();
+  auto open = [t]() {
+    tk_cfg->ha_aufruf("esphomeremote.tv_app", {{"app", "netflix"}, {"search", t.zoek}, {"entity_id", noir::tv::entiteit()}});
+  };
+  if (!noir::tv_aan()) {
+    noir_tv_starten();
+    noir::zeigen_seite(noir::S_NF_DETAIL);
+    noir::toast("TV start\xE2\x80\xA6", 2500);
+    App.scheduler.set_timeout(tk_cfg, "noir_nf_open", 8000, open);
+    return;
+  }
+  open();
+  noir::toast(t.naam.c_str());
+}
 // Ingebouwde scène "Alles uit": lampen, tv, KEF en airco
 inline void noir_alles_uit() {
   for (const auto &l : noir::lampen()) {
@@ -1117,6 +1138,7 @@ inline void noir_item_uitvoeren(JsonObjectConst it) {
 }
 inline void noir_actie(int a) {
   if (a >= noir::SCENE && a < noir::SCENE + 40) { noir_scene(a - noir::SCENE); return; }
+  if (a >= noir::NF_TITEL && a < noir::NF_TITEL + 300) { noir::nf_detail_tonen(a - noir::NF_TITEL); return; }   // NOIR Netflix
   if (a >= noir::ITEM) { noir_item_actie(a - noir::ITEM); return; }
   if (a >= noir::AIRCO_MODUS && a < noir::AIRCO_MODUS + 5) { noir::airco::modus(a - noir::AIRCO_MODUS); return; }
   if (a >= noir::LAMP && a < noir::LAMP + 12) { noir::lamp_schakelen(a - noir::LAMP, millis()); return; }
@@ -1125,6 +1147,7 @@ inline void noir_actie(int a) {
     if (!noir::tv_aan()) noir_tv_starten();
     if (!noir_tv_script().empty()) tk_cfg->ha_aufruf(noir_tv_script(), {{"tv_source", noir::app_bron()[i]}});
     noir::toast(noir::APP_NAAM[i]);
+    if (!strcmp(noir::APP_NAAM[i], "Netflix")) noir::zeigen_seite(noir::S_NETFLIX);   // een scherm dieper (2026-11-22)
     return;
   }
   switch (a) {
@@ -1155,6 +1178,8 @@ inline void noir_actie(int a) {
       else noir_menupagina(noir_scenes_seite());
       break;
     case noir::SCENE_ALLES_UIT: noir_alles_uit(); break;
+    case noir::NETFLIX: noir::zeigen_seite(noir::S_NETFLIX); break;   // NOIR Netflix zonder de app te starten
+    case noir::NF_AFSPELEN: noir_netflix_afspelen(); break;
     case noir::AIRCO:   // NOIR Airco-scherm (MHI via IR); met noir_airco_seite de menupagina zoals voorheen
       if (noir_airco_seite().empty()) noir::zeigen_seite(noir::S_AIRCO);
       else noir_menupagina(noir_airco_seite());
@@ -1184,7 +1209,9 @@ inline void noir_actie(int a) {
     }
     case noir::DIM_GEREED: noir::dimmer_dicht(); break;
     case noir::TERUG:
-      if (noir::st().seite != noir::S_THUIS) noir::zeigen_seite(noir::S_THUIS);
+      if (noir::st().seite == noir::S_NF_DETAIL) noir::zeigen_seite(noir::S_NETFLIX);   // detail -> Netflix
+      else if (noir::st().seite == noir::S_NETFLIX) noir::zeigen_seite(noir::S_TV);   // Netflix -> TV -> Thuis
+      else if (noir::st().seite != noir::S_THUIS) noir::zeigen_seite(noir::S_THUIS);
       else nav_back->execute();
       break;
     case noir::THUIS: noir::zeigen_seite(noir::S_THUIS); break;
@@ -1220,6 +1247,10 @@ inline void noir_starten(bool aan, const char *kef, const char *licht, const cha
   noir::thema_laden(noir_ui_skin->value(), noir_ui_wall->value(), noir_ui_radius->value());
   noir::st().items = []() { return noir_items(); };
   noir::st().scenes_items = []() { return noir_pagina_items("noir_scenes"); };   // NOIR Scènes
+  // NOIR Netflix-dashboard: lijsten/posters via HA (zelfde sleutel als de states), laatst gestart in een global
+  noir::nf::url_basis() = noir::licht_http::url_basis();
+  noir::nf::laatst_laden(noir_nf_laatst->value());
+  noir::nf::d().bewaar = [](const std::string &v) { noir_nf_laatst->value() = v; };
   // NOIR Airco (2026-11-22): IR-frame via de gewone IR-stap (zelf/dock/HA-blaster), stand bewaard in een global
   noir::airco::inst_laden(tk_cfg->wurzel()["noir_airco"]);   // instellingen uit de configurator
   noir::airco::uitpakken(noir_airco_stand->value());
