@@ -1370,12 +1370,13 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
         hass.http.register_view(NetflixBeeldView(nd, lambda r: schluessel_ok(r, _kd.key)))
     await nd.starten(entry.options.get("tmdb_key", ""))
     # NOIR Audio (2026-11-22): Spotify-lijsten en hoesjes (uit de Spotify-media_player zelf)
-    from .spotify import SpotifyBeeldView, SpotifyData, SpotifyView
+    from .spotify import SpotifyBeeldView, SpotifyData, SpotifyView, SpotifyZoekView
     if hass.data.get(DOMAIN + "_spotify") is None:
         sd = hass.data[DOMAIN + "_spotify"] = SpotifyData(hass)
         _kd2 = hass.data[DOMAIN]
         hass.http.register_view(SpotifyView(sd, lambda r: schluessel_ok(r, _kd2.key)))
         hass.http.register_view(SpotifyBeeldView(sd, lambda r: schluessel_ok(r, _kd2.key)))
+        hass.http.register_view(SpotifyZoekView(sd, lambda r: schluessel_ok(r, _kd2.key)))
 
     async def geaendert(hass: HomeAssistant, e) -> None:
         kd: KonfigData = hass.data[DOMAIN]

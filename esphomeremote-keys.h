@@ -1151,6 +1151,12 @@ inline void noir_actie(int a) {
   if (a >= noir::NF_TITEL && a < noir::NF_TITEL + 300) { noir::nf_detail_tonen(a - noir::NF_TITEL); return; }   // NOIR Netflix
   // NOIR Audio + Spotify (2026-11-22)
   if (a >= noir::AUDIO_BRON && a < noir::AUDIO_BRON + noir::audio::BRONNEN) { noir::audio::bron_kiezen(a - noir::AUDIO_BRON); return; }
+  if (a >= noir::ZOEK_TOETS && a < noir::ZOEK_TOETS + 26) { noir::audio::zoek_toets(a - noir::ZOEK_TOETS); return; }
+  if (a >= noir::ZOEK_RES && a < noir::ZOEK_RES + 10) {
+    noir::audio::zoek_spelen(a - noir::ZOEK_RES);
+    noir::toast(noir::audio::d().titel.c_str());
+    return;
+  }
   if (a >= noir::SP_LIJST && a < noir::SP_APPARAAT + 10) {
     if (noir::audio::lijst_actie(a, noir::SP_LIJST, noir::SP_RECENT, noir::SP_APPARAAT) && a < noir::SP_APPARAAT) noir::toast(noir::audio::d().titel.c_str());
     return;
@@ -1190,6 +1196,11 @@ inline void noir_actie(int a) {
     case noir::AUDIO_AANUIT: noir::audio::aanuit(); break;
     case noir::SP_SHUFFLE: noir::audio::shuffle_wissel(); break;
     case noir::SP_REPEAT: noir::audio::repeat_wissel(); break;
+    case noir::ZOEK_OPEN: noir::zeigen_seite(noir::S_ZOEK); break;
+    case noir::ZOEK_WIS: noir::audio::zoek_wis(); break;
+    case noir::ZOEK_SPATIE: noir::audio::zoek_spatie(); break;
+    case noir::ZOEK_GA: noir::audio::zoek_ga(); break;
+    case noir::ZOEK_VELD: noir::audio::zoek_veld_tik(); break;
     case noir::LICHT:   // eigen NOIR-scherm met lampen; zonder lampen de menupagina zoals voorheen
       if (!noir::lampen().empty() || noir_licht_seite().empty()) noir::zeigen_seite(noir::S_LICHT);
       else noir_menupagina(noir_licht_seite());
@@ -1233,6 +1244,7 @@ inline void noir_actie(int a) {
       if (noir::st().seite == noir::S_NF_DETAIL) noir::zeigen_seite(noir::S_NETFLIX);   // detail -> Netflix
       else if (noir::st().seite == noir::S_NETFLIX) noir::zeigen_seite(noir::S_TV);   // Netflix -> TV -> Thuis
       else if (noir::st().seite == noir::S_SPOTIFY) noir::zeigen_seite(noir::S_AUDIO);   // Spotify -> Audio -> Thuis
+      else if (noir::st().seite == noir::S_ZOEK) noir::zeigen_seite(noir::S_SPOTIFY);   // Zoeken -> Spotify
       else if (noir::st().seite != noir::S_THUIS) noir::zeigen_seite(noir::S_THUIS);
       else nav_back->execute();
       break;

@@ -84,6 +84,8 @@ enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, S
                    AIRCO_AANUIT = 140, AIRCO_MIN = 141, AIRCO_PLUS = 142, AIRCO_FAN = 143, AIRCO_SWING = 144, AIRCO_HI = 145, AIRCO_ECO = 146, KNOPTEST = 160, TEST_RESET = 161, SCENE_ALLES_UIT = 170,
                    NETFLIX = 106, NF_AFSPELEN = 186,
                    AUDIO_SPOTIFY = 107, AUDIO_AANUIT = 189, SP_SHUFFLE = 187, SP_REPEAT = 188,
+                   ZOEK_OPEN = 108, ZOEK_WIS = 190, ZOEK_SPATIE = 191, ZOEK_GA = 192, ZOEK_VELD = 193,
+                   ZOEK_TOETS = 5000 /* +i: letter i van het toetsenbord */, ZOEK_RES = 5100 /* +i: zoekresultaat */,
                    AUDIO_BRON = 4600 /* 4600+i: KEF-ingang */, SP_LIJST = 4700 /* +i playlist */, SP_RECENT = 4800 /* +i */, SP_APPARAAT = 4900 /* +i */,
                    NF_TITEL = 3200 /* 3200 + lijst*100 + i: lijst 0 Top 10, 1 Populair, 2 Laatst gestart */,
                    SCENE = 3000 /* 3000+i: scène i van de configuratorpagina "noir_scenes" */,
@@ -116,7 +118,7 @@ struct Beelden {
   const void *app[6]{};   // PS5, Switch, Netflix, YouTube, Cookie IPTV (nullptr = tekst), Plex
 };
 
-enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_AIRCO = 4, S_TEST = 5, S_SCENES = 6, S_NETFLIX = 7, S_NF_DETAIL = 8, S_AUDIO = 9, S_SPOTIFY = 10, S_ANZ = 11 };
+enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_AIRCO = 4, S_TEST = 5, S_SCENES = 6, S_NETFLIX = 7, S_NF_DETAIL = 8, S_AUDIO = 9, S_SPOTIFY = 10, S_ZOEK = 11, S_ANZ = 12 };
 
 struct Stand {
   lv_obj_t *laag{nullptr};                  // NOIR Thuis
@@ -139,6 +141,7 @@ struct Stand {
   std::function<JsonArrayConst()> scenes_items;   // configuratorpagina "noir_scenes"
   lv_obj_t *netflix{nullptr}, *netflix_body{nullptr}, *nfd_laag{nullptr}, *nfd_body{nullptr};   // NOIR Netflix (2026-11-22)
   lv_obj_t *audio{nullptr}, *audio_body{nullptr}, *spotify{nullptr}, *spotify_body{nullptr};    // NOIR Audio + Spotify
+  lv_obj_t *zoek{nullptr}, *zoek_body{nullptr};                                               // NOIR Spotify zoeken
   lv_obj_t *home{nullptr};
   std::function<JsonArrayConst()> items;    // tegels van NOIR Thuis (configurator), voor het herbouwen
 };
@@ -1531,7 +1534,7 @@ inline std::string *bron_id() {   // source van de KEF-media_player (kef_connect
 }
 struct Beeld { uint8_t *px{nullptr}; lv_image_dsc_t dsc{}; };
 struct Lijst { std::string naam, sub, uri, type; int beeld{0}; };   // beeld = sleutel in covers (0 = geen)
-static const int COVER_NU = 1, COVER_LIJST = 100, COVER_RECENT = 200;   // sleutels in covers
+static const int COVER_NU = 1, COVER_LIJST = 100, COVER_RECENT = 200, COVER_ZOEK = 300;   // sleutels in covers
 struct Data {
   std::string kef, spotify, sub_e;    // entiteiten (sub_e = number.* van de subwoofer)
   std::string kef_state;              // on/off/unavailable
@@ -1544,7 +1547,9 @@ struct Data {
   int cover{0};                       // sleutel in covers voor "nu speelt"
   bool shuffle{false};
   int repeat{0};                      // 0 uit, 1 alles, 2 nummer
-  std::vector<Lijst> playlists, recent, apparaten;
+  std::vector<Lijst> playlists, recent, apparaten, zoek;
+  std::string zoek_tekst;
+  bool zoek_bezig{false}, zoek_toetsen{true};   // zoek_toetsen = toetsenbord zichtbaar (anders de resultaten groot)
   std::map<int, Beeld> covers;
   std::vector<std::pair<lv_obj_t *, int>> wacht;   // beeldobjecten per cover-sleutel
   std::string cover_van_titel;                      // titel waarvoor de hoes is gevraagd
@@ -1667,6 +1672,7 @@ inline void tonen() {
 
 // ---- NOIR Audio: gegevens uit HA en bediening ------------------------------------------------------------------
 inline void spotify_herbouwen();
+inline void zoek_herbouwen();
 namespace audio {
 // Stand uit /states (licht_http, elke 2 s zolang Audio/Spotify open is): KEF, subwoofer, Spotify
 // media_player: [state, bri, volume 0-100, unit, titel, artiest, stil, shuffle, repeat, app, source, positie, duur, leeftijd]
@@ -1730,12 +1736,37 @@ inline bool klaar_(const nf::Taak &t, int status, uint8_t *buf, size_t len) {
     if (t.id == COVER_NU) tonen();
     return true;
   }
+  if (t.soort == 'z') {
+    x.zoek_bezig = false;
+    x.zoek.clear();
+    for (auto it = x.covers.begin(); it != x.covers.end();) {
+      if (it->first >= COVER_ZOEK) { nf::vrij_(it->second.px); it = x.covers.erase(it); } else ++it;
+    }
+    if (status == 200 && buf != nullptr) {
+      const char *p = (const char *) buf, *eind = p + len;
+      while (p < eind) {
+        const char *e = (const char *) memchr(p, '\n', eind - p);
+        if (e == nullptr) e = eind;
+        std::vector<std::string> v;
+        const char *q2 = p;
+        for (const char *c = p; c <= e; c++) if (c == e || *c == '\t') { v.emplace_back(q2, c - q2); q2 = c + 1; }
+        if (v.size() >= 5 && v[0] == "z" && x.zoek.size() < 10) x.zoek.push_back({v[1], v[2], v[3], v[4], COVER_ZOEK + (int) x.zoek.size()});
+        p = e + 1;
+      }
+      for (size_t i = 0; i < x.zoek.size(); i++)
+        nf::d().rij.push_back({nf::url_("/spotify/img?", "&e=" + x.spotify + "&s=l&w=z&i=" + std::to_string(i)), x.zoek[i].beeld, 'l', 64 * 64 * 2});
+    }
+    x.zoek_toetsen = x.zoek.empty();
+    zoek_herbouwen();
+    if (buf != nullptr) nf::vrij_(buf);
+    return true;
+  }
   if (t.soort != 'a') return false;
   x.lijst_bezig = false;
   if (status != 200 || buf == nullptr || len == 0) return false;
   x.playlists.clear(); x.recent.clear(); x.apparaten.clear();
   for (auto it = x.covers.begin(); it != x.covers.end();) {   // hoesjes van de oude lijst (sleutel = plek) weg
-    if (it->first >= COVER_LIJST) { nf::vrij_(it->second.px); it = x.covers.erase(it); } else ++it;
+    if (it->first >= COVER_LIJST && it->first < COVER_ZOEK) { nf::vrij_(it->second.px); it = x.covers.erase(it); } else ++it;
   }
   const char *p = (const char *) buf, *eind = p + len;
   while (p < eind) {
@@ -1812,6 +1843,46 @@ inline void repeat_wissel() {
   if (x.spotify.empty() || !ha()) return;
   x.repeat = (x.repeat + 1) % 3;
   ha()("media_player.repeat_set", {{"entity_id", x.spotify}, {"repeat", rep[x.repeat]}});
+  tonen();
+}
+// ---- zoeken ----
+static const char *LETTERS = "QWERTYUIOPASDFGHJKLZXCVBNM";
+inline std::string url_code_(const std::string &t) {
+  std::string o;
+  for (unsigned char c : t) {
+    if (isalnum(c) || c == '-' || c == '_' || c == '.') o += (char) c;
+    else { char b[4]; snprintf(b, sizeof(b), "%%%02X", c); o += b; }
+  }
+  return o;
+}
+inline void zoek_veld_();   // verderop (tekstveld bijwerken)
+inline void zoek_toets(int i) {
+  Data &x = d();
+  if (i < 0 || i >= 26 || x.zoek_tekst.size() >= 40) return;
+  x.zoek_tekst += (char) tolower(LETTERS[i]);
+  zoek_veld_();
+}
+inline void zoek_spatie() { Data &x = d(); if (!x.zoek_tekst.empty() && x.zoek_tekst.back() != ' ') { x.zoek_tekst += ' '; zoek_veld_(); } }
+inline void zoek_wis() { Data &x = d(); if (!x.zoek_tekst.empty()) { x.zoek_tekst.pop_back(); zoek_veld_(); } }
+inline void zoek_ga() {
+  Data &x = d();
+  std::string q = x.zoek_tekst;
+  while (!q.empty() && q.back() == ' ') q.pop_back();
+  if (q.empty() || x.spotify.empty() || x.zoek_bezig) return;
+  const std::string u = nf::url_("/spotify/zoek?", "&e=" + x.spotify + "&q=" + url_code_(q));
+  if (u.empty()) return;
+  x.zoek_bezig = true;
+  nf::d().rij.insert(nf::d().rij.begin(), {u, 0, 'z', 4 * 1024});
+  zoek_veld_();
+}
+inline void zoek_veld_tik() { d().zoek_toetsen = !d().zoek_toetsen || d().zoek.empty(); zoek_herbouwen(); }
+inline void zoek_spelen(int i) {
+  Data &x = d();
+  if (i < 0 || i >= (int) x.zoek.size() || x.spotify.empty() || !ha()) return;
+  const Lijst &l = x.zoek[i];
+  ha()("media_player.play_media", {{"entity_id", x.spotify}, {"media_content_id", l.uri}, {"media_content_type", l.type.empty() ? "track" : l.type}});
+  x.titel = l.naam; x.artiest = l.sub; x.cover = l.beeld; x.pos = 0; x.sp_state = "playing";
+  x.cover_van_titel = x.titel;
   tonen();
 }
 // a = SP_LIJST/SP_RECENT/SP_APPARAAT + i; false = geen geldige keuze
@@ -1982,7 +2053,10 @@ inline void spotify_bouwen(lv_obj_t *laag, const Fonts &f) {
   u.sp_tijd = label(body, "", 0, 146, 216, f.f12, MUTED);
   u.sp_shuffle = tekst_knop_(body, 0, 168, 104, 30, SP_SHUFFLE, "Shuffle", f);
   u.sp_repeat = tekst_knop_(body, 112, 168, 104, 30, SP_REPEAT, "Herhaal", f);
-  int y = 212;
+  lv_obj_t *zk = knop(body, 0, 206, 216, 34, ZOEK_OPEN);
+  lv_obj_t *zl = label(zk, "Zoek een nummer of artiest\xE2\x80\xA6", 14, 0, 190, f.f12, MUTED);
+  lv_obj_align(zl, LV_ALIGN_LEFT_MID, 14, 0);
+  int y = 252;
   auto rij = [&](const char *kop, const std::vector<audio::Lijst> &l, int basis) {
     if (l.empty()) return;
     nf_kop_(body, y, kop, nullptr, f);
@@ -2150,6 +2224,7 @@ inline void inst_bouwen(lv_obj_t *laag, const Fonts &f) {
 }
 
 // Lagen over page_home bouwen (eenmalig). home = page_home->obj.
+inline void zoek_bouwen(lv_obj_t *laag, const Fonts &f);   // verderop (NOIR Spotify zoeken)
 inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl, JsonArrayConst thuis_items = JsonArrayConst()) {
   Stand &s = st();
   if (s.toast_font == nullptr) s.toast_font = f.f14;
@@ -2191,6 +2266,10 @@ inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl, JsonArrayC
   spotify_bouwen(s.spotify, f);
   onderknop(s.spotify, ICO_LINKS, "Terug", 12, TERUG, f);
   onderknop(s.spotify, ICO_HOME, "Thuis", 124, THUIS, f);
+  s.zoek = laag_maken(home, bl);
+  zoek_bouwen(s.zoek, f);
+  onderknop(s.zoek, ICO_LINKS, "Terug", 12, TERUG, f);
+  onderknop(s.zoek, ICO_HOME, "Thuis", 124, THUIS, f);
   s.test = laag_maken(home, bl);
   test_bouwen(s.test, f);
   onderknop(s.test, ICO_LINKS, "Terug", 12, TERUG, f);
@@ -2234,6 +2313,78 @@ inline void spotify_herbouwen() {
   u.sp_titel = u.sp_sub = u.sp_cover = u.sp_balk = u.sp_tijd = u.sp_app = u.sp_shuffle = u.sp_repeat = nullptr;
   body_vervangen_(s.spotify, s.spotify_body, [&]() { spotify_bouwen(s.spotify, s.fonts); });
 }
+
+// ---- NOIR Spotify zoeken: tekstveld, eigen toetsenbord (geen LVGL-keyboard/textarea in deze build), resultaten ----
+inline lv_obj_t *&zoek_veld_lbl() { static lv_obj_t *l = nullptr; return l; }
+inline void audio::zoek_veld_() {
+  lv_obj_t *l = zoek_veld_lbl();
+  if (l == nullptr || !lv_obj_is_valid(l)) return;
+  const Data &x = d();
+  std::string t = x.zoek_tekst.empty() ? "" : x.zoek_tekst;
+  if (x.zoek_bezig) t += "  \xE2\x80\xA6";
+  else if (x.zoek_toetsen) t += "|";
+  lv_label_set_text(l, t.empty() ? "|" : t.c_str());
+}
+inline void zoek_bouwen(lv_obj_t *laag, const Fonts &f) {
+  Stand &s = st();
+  audio::Data &x = audio::d();
+  lv_obj_t *body = s.zoek_body = body_maken(laag, false);
+  groen_label_(body, "Zoeken", 0, 0, 110, f.f16 != nullptr ? f.f16 : f.f14);
+  lv_obj_t *veld = knop(body, 0, 26, 216, 32, ZOEK_VELD);
+  lv_obj_set_style_bg_color(veld, k(SURF2), 0);
+  zoek_veld_lbl() = label(veld, "", 10, 0, 196, f.f14 != nullptr ? f.f14 : f.f12, TEXT);
+  lv_label_set_long_mode(zoek_veld_lbl(), LV_LABEL_LONG_MODE_CLIP);
+  lv_obj_align(zoek_veld_lbl(), LV_ALIGN_LEFT_MID, 10, 0);
+  // resultaten: klein boven het toetsenbord, of de hele hoogte als het toetsenbord dicht is
+  const int ly = 64, lh = x.zoek_toetsen ? 52 : 166;
+  lv_obj_t *lijst = lv_obj_create(body);
+  lv_obj_remove_style_all(lijst);
+  lv_obj_set_pos(lijst, 0, ly);
+  lv_obj_set_size(lijst, 216, lh);
+  lv_obj_set_scroll_dir(lijst, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(lijst, LV_SCROLLBAR_MODE_OFF);
+  if (x.zoek.empty()) {
+    lv_obj_t *h = label(lijst, x.zoek_bezig ? "Zoeken\xE2\x80\xA6" : "Typ een titel of artiest en tik op Zoek.", 2, 4, 212, f.f12, MUTED);
+    lv_label_set_long_mode(h, LV_LABEL_LONG_MODE_WRAP);
+  }
+  for (int i = 0; i < (int) x.zoek.size(); i++) {
+    lv_obj_t *b = knop(lijst, 0, i * 46, 216, 42, ZOEK_RES + i);
+    cover_vak_(b, 5, 5, 32, x.zoek[i].beeld, ICO_NOOT, f);
+    label(b, x.zoek[i].naam.c_str(), 46, 5, 162, f.f12, TEXT);
+    label(b, x.zoek[i].sub.c_str(), 46, 22, 162, f.f12, MUTED);
+  }
+  if (x.zoek_toetsen) {
+    // QWERTY: 10 / 9 / 7 + wissen, dan spatie en Zoek
+    const int kh = 26, stap = 28, ky = 122;
+    auto toets = [&](int x0, int y0, int w, int actie, const char *t) {
+      lv_obj_t *b = tekst_knop_(body, x0, y0, w, kh, actie, t, f);
+      lv_obj_set_style_radius(b, 6, 0);
+      return b;
+    };
+    char t[2] = {0, 0};
+    for (int i = 0; i < 26; i++) {
+      const int rij = i < 10 ? 0 : i < 19 ? 1 : 2, kol = i < 10 ? i : i < 19 ? i - 10 : i - 19;
+      const int x0 = rij == 0 ? 0 : rij == 1 ? 11 : 11;
+      t[0] = audio::LETTERS[i];
+      toets(x0 + (int) lroundf(kol * 21.7f), ky + rij * stap, 20, ZOEK_TOETS + i, t);
+    }
+    toets(11 + (int) lroundf(7 * 21.7f), ky + 2 * stap, 216 - 11 - (int) lroundf(7 * 21.7f), ZOEK_WIS, "Wis");
+    toets(0, ky + 3 * stap, 140, ZOEK_SPATIE, "spatie");
+    lv_obj_t *ga = toets(146, ky + 3 * stap, 70, ZOEK_GA, "Zoek");
+    lv_obj_set_style_bg_color(ga, lv_color_hex(SPOTIFY_GROEN), 0);
+    lv_obj_set_style_bg_grad_color(ga, lv_color_hex(0x169C46), 0);
+    lv_obj_add_flag(ga, LV_OBJ_FLAG_USER_4);
+    lv_obj_t *gl = lv_obj_get_child(ga, -1);
+    if (gl != nullptr) { lv_obj_set_style_text_color(gl, lv_color_hex(0x0B0D10), 0); lv_obj_add_flag(gl, LV_OBJ_FLAG_USER_4); }
+  }
+  audio::zoek_veld_();
+}
+inline void zoek_herbouwen() {
+  Stand &s = st();
+  zoek_veld_lbl() = nullptr;
+  body_vervangen_(s.zoek, s.zoek_body, [&]() { zoek_bouwen(s.zoek, s.fonts); });
+}
+
 // Detailscherm voor titel code (lijst*100 + i) opbouwen en tonen
 inline void zeigen_seite(int seite);
 inline void nf_detail_tonen(int code) {
@@ -2252,7 +2403,7 @@ inline void licht_herbouwen() {
 
 inline lv_obj_t *laag_van(int seite) {
   Stand &s = st();
-  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : seite == S_AIRCO ? s.airco : seite == S_TEST ? s.test : seite == S_SCENES ? s.scenes : seite == S_NETFLIX ? s.netflix : seite == S_NF_DETAIL ? s.nfd_laag : seite == S_AUDIO ? s.audio : seite == S_SPOTIFY ? s.spotify : s.laag;
+  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : seite == S_AIRCO ? s.airco : seite == S_TEST ? s.test : seite == S_SCENES ? s.scenes : seite == S_NETFLIX ? s.netflix : seite == S_NF_DETAIL ? s.nfd_laag : seite == S_AUDIO ? s.audio : seite == S_SPOTIFY ? s.spotify : seite == S_ZOEK ? s.zoek : s.laag;
 }
 
 // Een NOIR-pagina tonen (de andere verbergen); de statusbalk verhuist mee
@@ -2275,7 +2426,7 @@ inline bool op_tv() { return st().zichtbaar && st().seite == S_TV; }
 inline bool op_licht() { return st().zichtbaar && st().seite == S_LICHT; }
 inline bool op_airco() { return st().zichtbaar && st().seite == S_AIRCO; }
 inline bool op_test() { return st().zichtbaar && st().seite == S_TEST; }
-inline bool op_audio() { return st().zichtbaar && (st().seite == S_AUDIO || st().seite == S_SPOTIFY); }
+inline bool op_audio() { return st().zichtbaar && (st().seite == S_AUDIO || st().seite == S_SPOTIFY || st().seite == S_ZOEK); }
 inline bool op_netflix() { return st().zichtbaar && (st().seite == S_NETFLIX || st().seite == S_NF_DETAIL); }
 
 // NOIR aan (laatst getoonde pagina) of helemaal weg (gewone Aggro600-startpagina zichtbaar)
@@ -2303,9 +2454,10 @@ inline void alles_herbouwen() {
     keuze_dicht();
     const bool zicht = s.zichtbaar;
     const int seite = s.seite;
-    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst, s.airco, s.test, s.scenes, s.netflix, s.nfd_laag, s.audio, s.spotify};
+    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst, s.airco, s.test, s.scenes, s.netflix, s.nfd_laag, s.audio, s.spotify, s.zoek};
     for (lv_obj_t *o : weg) if (o != nullptr) lv_obj_delete(o);   // kop hangt aan een ervan
-    s.laag = s.tv = s.licht = s.inst = s.airco = s.test = s.scenes = s.scenes_body = s.netflix = s.netflix_body = s.nfd_laag = s.nfd_body = s.audio = s.audio_body = s.spotify = s.spotify_body = nullptr;
+    s.laag = s.tv = s.licht = s.inst = s.airco = s.test = s.scenes = s.scenes_body = s.netflix = s.netflix_body = s.nfd_laag = s.nfd_body = s.audio = s.audio_body = s.spotify = s.spotify_body = s.zoek = s.zoek_body = nullptr;
+    zoek_veld_lbl() = nullptr;
     audio::ui() = audio::Ui();
     for (auto &t : knoptest::st_().tegel) t = nullptr;
     knoptest::st_().info = nullptr;

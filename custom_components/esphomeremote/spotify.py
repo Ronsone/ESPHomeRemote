@@ -5,12 +5,13 @@ GET /api/esphomeremote/spotify?k=<sleutel>&e=<media_player van Spotify>
       p\t<naam>\t<sub>\t<media_content_id>\t<media_content_type>   jouw playlists
       r\t<naam>\t<sub>\t<media_content_id>\t<media_content_type>   recent gespeeld
       d\t<apparaat>                                                 Spotify Connect-apparaten (source_list)
+GET /api/esphomeremote/spotify/zoek?k=<sleutel>&e=<entity>&q=<tekst>  zoeken: "z\t<titel>\t<artiest>\t<uri>\ttrack"
 GET /api/esphomeremote/spotify/img?k=<sleutel>&e=<entity>&s=c           hoes van wat nu speelt, 96 x 96 RGB565
-GET /api/esphomeremote/spotify/img?k=<sleutel>&e=<entity>&s=l&w=p|r&i=<n> hoesje uit de lijst, 64 x 64 RGB565
+GET /api/esphomeremote/spotify/img?k=<sleutel>&e=<entity>&s=l&w=p|r|z&i=<n> hoesje uit een lijst, 64 x 64 RGB565
 
-Werkt met elke media_player die bladeren ondersteunt zoals de officiele Spotify-integratie (en SpotifyPlus):
-de lijsten komen uit async_browse_media van de entiteit zelf, afspelen gaat met media_player.play_media
-(media_content_id/-type uit deze lijst). Geen eigen Spotify-sleutels nodig.
+Lijsten en zoeken gaan via de Spotify Web API met het token van de officiele Spotify-integratie (dezelfde
+koppeling, geen eigen sleutels). Lukt dat niet, dan vallen playlists/recent terug op async_browse_media van de
+entiteit. Afspelen: media_player.play_media met media_content_id/-type uit deze lijsten.
 """
 from __future__ import annotations
 
@@ -48,11 +49,96 @@ def _schoon(t) -> str:
     return str(t or "").replace("\t", " ").replace("\n", " ").strip()[:60]
 
 
+API = "https://api.spotify.com/v1"
+
+
+def _beeld_url(images) -> str | None:
+    """Kleinste afbeelding van minstens 64 px (Spotify geeft ze van groot naar klein)."""
+    goed = None
+    for im in images or []:
+        if (im.get("width") or 640) >= 64:
+            goed = im.get("url")
+    return goed or ((images or [{}])[0].get("url") if images else None)
+
+
 class SpotifyData:
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
         self.lijsten: dict[str, tuple[float, list, list]] = {}   # entity -> (tijd, playlists, recent)
+        self.zoek: dict[str, list] = {}                          # entity -> laatste zoekresultaten
         self.beelden: OrderedDict[str, bytes] = OrderedDict()
+
+    async def _token(self, eid: str) -> str | None:
+        """Access token van de Spotify-integratie waar deze entiteit bij hoort (vernieuwt hem zo nodig)."""
+        try:
+            from homeassistant.helpers import config_entry_oauth2_flow, entity_registry as er
+            reg = er.async_get(self.hass).async_get(eid)
+            entry = self.hass.config_entries.async_get_entry(reg.config_entry_id) if reg and reg.config_entry_id else None
+            if entry is None or entry.domain != "spotify":
+                entries = self.hass.config_entries.async_entries("spotify")
+                entry = entries[0] if entries else None
+            if entry is None:
+                return None
+            impl = await config_entry_oauth2_flow.async_get_config_entry_implementation(self.hass, entry)
+            sess = config_entry_oauth2_flow.OAuth2Session(self.hass, entry, impl)
+            await sess.async_ensure_token_valid()
+            return sess.token.get("access_token")
+        except Exception as err:   # noqa: BLE001
+            _LOGGER.info("Spotify-token voor %s niet beschikbaar: %s", eid, err)
+            return None
+
+    async def _api(self, eid: str, pad: str, params: dict | None = None):
+        token = await self._token(eid)
+        if not token:
+            return None
+        try:
+            async with async_get_clientsession(self.hass).get(
+                    API + pad, params=params, headers={"Authorization": f"Bearer {token}"}, timeout=10) as r:
+                if r.status != 200:
+                    _LOGGER.info("Spotify API %s: HTTP %s", pad, r.status)
+                    return None
+                return await r.json()
+        except Exception as err:   # noqa: BLE001
+            _LOGGER.info("Spotify API %s mislukt: %s", pad, err)
+            return None
+
+    async def _api_lijsten(self, eid: str):
+        pl = await self._api(eid, "/me/playlists", {"limit": MAX_PER_RIJ})
+        rp = await self._api(eid, "/me/player/recently-played", {"limit": 30})
+        if pl is None and rp is None:
+            return None
+        playlists = []
+        for x in (pl or {}).get("items") or []:
+            if not x:
+                continue
+            n = (x.get("tracks") or x.get("items") or {}).get("total")
+            playlists.append({"naam": _schoon(x.get("name")), "sub": f"{n} nummers" if n else _schoon((x.get("owner") or {}).get("display_name")),
+                              "id": x.get("uri", ""), "type": "playlist", "thumb": _beeld_url(x.get("images"))})
+        recent, gezien = [], set()
+        for it in (rp or {}).get("items") or []:
+            t = (it or {}).get("track") or {}
+            if not t.get("uri") or t["uri"] in gezien:
+                continue
+            gezien.add(t["uri"])
+            recent.append({"naam": _schoon(t.get("name")), "sub": _schoon(", ".join(a.get("name", "") for a in t.get("artists") or [])),
+                           "id": t["uri"], "type": "track", "thumb": _beeld_url((t.get("album") or {}).get("images"))})
+            if len(recent) >= MAX_PER_RIJ:
+                break
+        return playlists[:MAX_PER_RIJ], recent
+
+    async def zoeken(self, eid: str, q: str) -> str:
+        q = q.strip()[:60]
+        res = []
+        if q:
+            data = await self._api(eid, "/search", {"q": q, "type": "track", "limit": 10, "market": "from_token"})
+            for t in ((data or {}).get("tracks") or {}).get("items") or []:
+                if not t or not t.get("uri"):
+                    continue
+                res.append({"naam": _schoon(t.get("name")), "sub": _schoon(", ".join(a.get("name", "") for a in t.get("artists") or [])),
+                            "id": t["uri"], "type": "track", "thumb": _beeld_url((t.get("album") or {}).get("images"))})
+            _LOGGER.info("Spotify zoeken '%s': %d resultaten", q, len(res))
+        self.zoek[eid] = res
+        return "".join(f"z\t{x['naam']}\t{x['sub']}\t{x['id']}\t{x['type']}\n" for x in res) or "\n"
 
     def _entiteit(self, eid: str):
         comp = self.hass.data.get("media_player")   # EntityComponent (DATA_COMPONENT = HassKey("media_player"))
@@ -98,13 +184,23 @@ class SpotifyData:
         oud = self.lijsten.get(eid)
         if oud is not None and time.monotonic() - oud[0] < LIJST_TTL:
             return oud[1], oud[2]
-        ent = self._entiteit(eid)
-        if ent is None:
-            return [], []
-        root = await self._bladeren(ent)
-        playlists = await self._categorie(ent, root, "current_user_playlists")
-        recent = await self._categorie(ent, root, "current_user_recently_played")
-        _LOGGER.info("Spotify-lijst %s: %d playlists, %d recent", eid, len(playlists), len(recent))
+        api = await self._api_lijsten(eid)
+        if api is not None:
+            playlists, recent = api
+            bron = "Web API"
+        else:
+            ent = self._entiteit(eid)
+            if ent is None:
+                _LOGGER.info("Spotify-lijst %s: entiteit niet gevonden", eid)
+                return [], []
+            root = await self._bladeren(ent)
+            if root is not None:
+                _LOGGER.info("Spotify bladeren %s, bovenste niveau: %s", eid,
+                             [(c.title, c.media_content_type, c.media_content_id) for c in root.children or []])
+            playlists = await self._categorie(ent, root, "current_user_playlists")
+            recent = await self._categorie(ent, root, "current_user_recently_played")
+            bron = "bladeren"
+        _LOGGER.info("Spotify-lijst %s (%s): %d playlists, %d recent", eid, bron, len(playlists), len(recent))
         if playlists or recent:
             self.lijsten[eid] = (time.monotonic(), playlists, recent)
         return playlists, recent
@@ -144,8 +240,11 @@ class SpotifyData:
         return raw
 
     async def tegel(self, eid: str, welke: str, i: int) -> bytes | None:
-        playlists, recent = await self.lijst(eid)
-        rij = playlists if welke == "p" else recent
+        if welke == "z":
+            rij = self.zoek.get(eid, [])
+        else:
+            playlists, recent = await self.lijst(eid)
+            rij = playlists if welke == "p" else recent
         if i < 0 or i >= len(rij) or not rij[i].get("thumb"):
             return None
         url = rij[i]["thumb"]
@@ -207,9 +306,29 @@ class SpotifyBeeldView(HomeAssistantView):
                 i = int(request.query.get("i", "-1"))
             except ValueError:
                 return web.Response(status=400)
-            raw = await self.sd.tegel(eid, "r" if request.query.get("w") == "r" else "p", i)
+            w = request.query.get("w", "p")
+            raw = await self.sd.tegel(eid, w if w in ("p", "r", "z") else "p", i)
         else:
             raw = await self.sd.hoes(eid)
         if raw is None:
             return web.Response(status=404)
         return web.Response(body=raw, content_type="application/octet-stream", headers={"Cache-Control": "no-store"})
+
+
+class SpotifyZoekView(HomeAssistantView):
+    url = "/api/esphomeremote/spotify/zoek"
+    name = "api:esphomeremote:spotify:zoek"
+    requires_auth = False
+
+    def __init__(self, sd: SpotifyData, sleutel_ok) -> None:
+        self.sd = sd
+        self.ok = sleutel_ok
+
+    async def get(self, request: web.Request) -> web.Response:
+        if not self.ok(request):
+            return web.Response(status=403)
+        eid = request.query.get("e", "")
+        if not eid.startswith("media_player."):
+            return web.Response(status=400)
+        return web.Response(body=await self.sd.zoeken(eid, request.query.get("q", "")), content_type="text/plain",
+                            charset="utf-8", headers={"Cache-Control": "no-store"})
