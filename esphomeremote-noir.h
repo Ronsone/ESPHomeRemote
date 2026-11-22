@@ -2844,6 +2844,9 @@ inline bool zoek_taste(int t, bool ingedrukt) {
 }
 inline bool audio_taste(int t, bool ingedrukt) {
   if (zoek_taste(t, ingedrukt)) return true;
+  // Op Audio/Spotify/Zoeken gaan pijlen en OK NIET naar de tv (2026-11-22: OK startte de serie die in Netflix op
+  // de tv geselecteerd stond, via de toetsindeling van de actieve activiteit)
+  if (op_audio() && (t == 14 || t == 35 || t == 15 || t == 32 || t == 34)) return true;
   if (!op_audio() || audio::d().spotify.empty() || !ha()) return false;
   if (t != 2 && t != 5 && t != 4 && t != 11) return false;
   if (!ingedrukt) return true;
