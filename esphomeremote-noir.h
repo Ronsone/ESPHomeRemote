@@ -18,6 +18,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <cmath>
 #ifdef ESP_PLATFORM
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
@@ -540,6 +541,10 @@ inline std::function<std::string()> &url_basis() { static std::function<std::str
 struct Abfrage { volatile bool laeuft{false}, fertig{false}; std::string url; char *buf{nullptr}; size_t len{0}; int status{0};
                  void *taak{nullptr}; uint32_t volgende{0}; };
 inline Abfrage &a() { static Abfrage x; return x; }
+// NOIR Audio (2026-11-22) haakt hier in: extra entiteiten in dezelfde vraag, eigen uitlezing, eigen "open"
+inline std::function<bool()> &extra_open() { static std::function<bool()> f; return f; }
+inline std::function<std::string()> &extra_e() { static std::function<std::string()> f; return f; }
+inline std::function<void(JsonDocument &)> &extra_lees() { static std::function<void(JsonDocument &)> f; return f; }
 #ifdef ESP_PLATFORM
 inline void einmal_() {
   Abfrage &q = a();
@@ -599,6 +604,7 @@ inline void auswerten_() {
         l.bri = v[1] | -1;
       }
       lampen_tekst();
+      if (extra_lees()) extra_lees()(doc);
     }
   }
 #ifdef ESP_PLATFORM
@@ -611,12 +617,14 @@ inline void auswerten_() {
 inline void tik(uint32_t nu, bool open) {
   Abfrage &q = a();
   if (q.fertig) { q.fertig = false; q.laeuft = false; auswerten_(); }
-  if (!open || q.laeuft || lampen().empty() || !url_basis() || (int32_t) (nu - q.volgende) < 0) return;
-  q.volgende = nu + 3000;
+  const bool extra = extra_open() && extra_open()();
+  if ((!open && !extra) || q.laeuft || (lampen().empty() && !extra) || !url_basis() || (int32_t) (nu - q.volgende) < 0) return;
+  q.volgende = nu + (extra ? 2000 : 3000);
   const std::string basis = url_basis()();
   if (basis.empty()) return;
   std::string lijst;
-  for (const Lamp &l : lampen()) { lijst += l.entiteit; lijst += ","; }
+  if (open) for (const Lamp &l : lampen()) { lijst += l.entiteit; lijst += ","; }
+  if (extra && extra_e()) lijst += extra_e()();
   q.url = basis + "&e=" + lijst;
   starten_();
 }
@@ -1116,6 +1124,8 @@ inline void scenes_bouwen(lv_obj_t *laag, const Fonts &f, const Beelden &bl, Jso
 // integratie (netflix.py) via HA (/api/esphomeremote/netflix...): de remote komt niet zelf op internet.
 // Bediening van de tv met de fysieke knoppen (play/pauze, stop, spoelen, D-pad, OK) - zie tv::taste.
 static const uint32_t NETFLIX_ROOD = 0xE50914;
+inline bool op_netflix();
+inline bool op_audio();
 namespace nf {
 struct Titel { int id{0}; std::string naam, zoek, jaar, genre, leeftijd, tekst, netflix; int seizoenen{0}; };   // netflix = titelnummer (Wikidata)
 struct Beeld { uint8_t *px{nullptr}; lv_image_dsc_t dsc{}; };
@@ -1136,6 +1146,8 @@ struct Data {
 };
 inline Data &d() { static Data x; return x; }
 inline std::function<std::string()> &url_basis() { static std::function<std::string()> f; return f; }   // ".../states?k=.."
+// Andere downloads in dezelfde rij (NOIR Audio: 'a' lijst, 'c' hoes): klaar(taak, status, buf, len) - true = buf overgenomen
+inline std::function<bool(const Taak &, int, uint8_t *, size_t)> &extra_klaar() { static std::function<bool(const Taak &, int, uint8_t *, size_t)> f; return f; }
 
 // ---- downloads (eigen taak, een tegelijk) ----
 struct Abfrage { volatile bool laeuft{false}, fertig{false}; Taak taak; uint8_t *buf{nullptr}; size_t len{0}; int status{0};
@@ -1270,6 +1282,8 @@ inline void klaar_() {
       tonen_(x.wacht_dash, t.id, 'p', &b.dsc);
       tonen_(x.wacht_detail, t.id, 'p', &b.dsc);
     } else vrij_(a.buf);
+  } else if (t.soort != 'p' && t.soort != 'b') {
+    if (!(extra_klaar() && extra_klaar()(t, a.status, a.buf, a.len))) vrij_(a.buf);
   } else if (t.soort == 'b') {
     if (a.status == 200 && a.buf != nullptr && a.len == t.max) {
       vrij_(x.achter.px);
@@ -1285,7 +1299,7 @@ inline void tik(uint32_t nu, bool zichtbaar) {
   Abfrage &a = q();
   Data &x = d();
   if (a.fertig) { a.fertig = false; a.laeuft = false; klaar_(); }
-  if (zichtbaar && !x.bezig && (int32_t) (nu - x.volgende) >= 0) {   // lijsten: bij openen, daarna elk uur
+  if (zichtbaar && op_netflix() && !x.bezig && (int32_t) (nu - x.volgende) >= 0) {   // lijsten: bij openen, daarna elk uur
     const std::string u = url_("/netflix?", "&f=tsv");
     if (!u.empty()) {
       x.bezig = true;
@@ -1512,13 +1526,14 @@ namespace audio {
 static const int BRONNEN = 6;
 static const char *BRON_NAAM[BRONNEN] = {"Wi-Fi", "Bluetooth", "TV", "Optisch", "Aux", "USB"};
 inline std::string *bron_id() {   // source van de KEF-media_player (kef_connector/pykefcontrol)
-  static std::string b[BRONNEN] = {"wifi", "bluetooth", "tv", "optic", "analog", "usb"};
+  static std::string b[BRONNEN] = {"wifi", "bluetooth", "tv", "optical", "analog", "usb"};
   return b;
 }
 struct Beeld { uint8_t *px{nullptr}; lv_image_dsc_t dsc{}; };
-struct Lijst { std::string naam, sub, uri; int beeld{0}; };   // beeld = sleutel in covers (0 = geen)
+struct Lijst { std::string naam, sub, uri, type; int beeld{0}; };   // beeld = sleutel in covers (0 = geen)
+static const int COVER_NU = 1, COVER_LIJST = 100, COVER_RECENT = 200;   // sleutels in covers
 struct Data {
-  std::string kef, spotify;           // entiteiten
+  std::string kef, spotify, sub_e;    // entiteiten (sub_e = number.* van de subwoofer)
   std::string kef_state;              // on/off/unavailable
   int bron{-1};                       // index in BRON_NAAM, -1 = onbekend
   int volume{-1};                     // 0-100
@@ -1531,8 +1546,13 @@ struct Data {
   int repeat{0};                      // 0 uit, 1 alles, 2 nummer
   std::vector<Lijst> playlists, recent, apparaten;
   std::map<int, Beeld> covers;
+  std::vector<std::pair<lv_obj_t *, int>> wacht;   // beeldobjecten per cover-sleutel
+  std::string cover_van_titel;                      // titel waarvoor de hoes is gevraagd
+  bool lijst_bezig{false}, lijst_geladen{false};
+  uint32_t lijst_volgende{0};
 };
 inline Data &d() { static Data x; return x; }
+inline bool &scherm_aan() { static bool b = true; return b; }   // firmware: startpagina zichtbaar en display aan
 // Per integratie in te vullen (firmware). Ontbreekt er een, dan doet die knop niets.
 inline std::function<void(int)> &sub_zetten() { static std::function<void(int)> f; return f; }            // dB
 inline std::function<void(const Lijst &)> &spelen() { static std::function<void(const Lijst &)> f; return f; }  // playlist/album
@@ -1571,6 +1591,19 @@ inline void cover_zetten_(lv_obj_t *im, int sleutel, int maat) {
   lv_obj_remove_flag(im, LV_OBJ_FLAG_HIDDEN);
 }
 inline bool speelt() { return d().sp_state == "playing" || d().sp_state == "paused"; }
+inline void wacht_(lv_obj_t *im, int sleutel) { if (sleutel > 0) d().wacht.push_back({im, sleutel}); }
+// Binnengekomen hoes: overal tonen waar hij op wacht (objecten van een herbouwd scherm zijn intussen weg)
+inline void cover_binnen_(int sleutel) {
+  auto &w = d().wacht;
+  for (size_t i = 0; i < w.size();) {
+    if (!lv_obj_is_valid(w[i].first)) { w.erase(w.begin() + i); continue; }
+    if (w[i].second == sleutel) {
+      lv_obj_t *vak = lv_obj_get_parent(w[i].first);
+      cover_zetten_(w[i].first, sleutel, lv_obj_get_width(vak));
+    }
+    i++;
+  }
+}
 
 // Alles wat zichtbaar is uit d() bijwerken (na elke statusvraag)
 inline void tonen() {
@@ -1632,6 +1665,179 @@ inline void tonen() {
 }
 }  // namespace audio
 
+// ---- NOIR Audio: gegevens uit HA en bediening ------------------------------------------------------------------
+inline void spotify_herbouwen();
+namespace audio {
+// Stand uit /states (licht_http, elke 2 s zolang Audio/Spotify open is): KEF, subwoofer, Spotify
+// media_player: [state, bri, volume 0-100, unit, titel, artiest, stil, shuffle, repeat, app, source, positie, duur, leeftijd]
+inline std::string entiteiten_() {
+  std::string e;
+  for (const std::string *x : {&d().kef, &d().sub_e, &d().spotify}) if (!x->empty()) { e += *x; e += ","; }
+  return e;
+}
+inline void lees_(JsonDocument &doc) {
+  Data &x = d();
+  if (!x.kef.empty()) {
+    JsonArrayConst v = doc[x.kef];
+    if (!v.isNull()) {
+      x.kef_state = v[0] | "";
+      x.volume = v[2] | -1;
+      const std::string bron = v[10] | "";
+      x.bron = -1;
+      for (int i = 0; i < BRONNEN; i++) if (bron == bron_id()[i]) x.bron = i;
+    }
+  }
+  if (!x.sub_e.empty()) {
+    JsonArrayConst v = doc[x.sub_e];
+    if (!v.isNull()) {
+      const char *w = v[0] | "";
+      if (*w && strcmp(w, "unavailable") != 0 && strcmp(w, "unknown") != 0) { x.sub = (int) lroundf(atof(w)); x.sub_bekend = true; }
+    }
+  }
+  if (!x.spotify.empty()) {
+    JsonArrayConst v = doc[x.spotify];
+    if (!v.isNull()) {
+      x.sp_state = v[0] | "";
+      x.titel = v[4] | "";
+      x.artiest = v[5] | "";
+      x.shuffle = v[7] | false;
+      const std::string rep = v[8] | "";
+      x.repeat = rep == "all" ? 1 : rep == "one" ? 2 : 0;
+      x.apparaat = v[10] | "";
+      const float pos = v[11] | -1.0f, duur = v[12] | 0.0f, leeftijd = v[13] | 0.0f;
+      x.duur = (int) duur;
+      x.pos = pos < 0 ? -1 : (int) (pos + (x.sp_state == "playing" ? leeftijd : 0));
+      // andere titel: nieuwe hoes
+      if (speelt() && !x.titel.empty() && x.titel != x.cover_van_titel) {
+        x.cover_van_titel = x.titel;
+        nf::d().rij.push_back({nf::url_("/spotify/img?", "&e=" + x.spotify + "&s=c&t=" + std::to_string(lv_tick_get() & 0xFFFF)), COVER_NU, 'c', 96 * 96 * 2});
+      }
+      if (speelt()) x.cover = COVER_NU;
+    }
+  }
+  tonen();
+}
+// Lijst van HA (TSV): "p|r\t<naam>\t<sub>\t<id>\t<type>" en "d\t<apparaat>"
+inline bool klaar_(const nf::Taak &t, int status, uint8_t *buf, size_t len) {
+  Data &x = d();
+  if (t.soort == 'c' || t.soort == 'l') {
+    if (status != 200 || buf == nullptr || len != t.max) return false;
+    const int maat = t.soort == 'c' ? 96 : 64;
+    Beeld &b = x.covers[t.id];
+    nf::vrij_(b.px);
+    beeld_vullen(b, buf, maat, maat);
+    cover_binnen_(t.id);
+    if (t.id == COVER_NU) tonen();
+    return true;
+  }
+  if (t.soort != 'a') return false;
+  x.lijst_bezig = false;
+  if (status != 200 || buf == nullptr || len == 0) return false;
+  x.playlists.clear(); x.recent.clear(); x.apparaten.clear();
+  for (auto it = x.covers.begin(); it != x.covers.end();) {   // hoesjes van de oude lijst (sleutel = plek) weg
+    if (it->first >= COVER_LIJST) { nf::vrij_(it->second.px); it = x.covers.erase(it); } else ++it;
+  }
+  const char *p = (const char *) buf, *eind = p + len;
+  while (p < eind) {
+    const char *e = (const char *) memchr(p, '\n', eind - p);
+    if (e == nullptr) e = eind;
+    std::vector<std::string> v;
+    const char *q2 = p;
+    for (const char *c = p; c <= e; c++) if (c == e || *c == '\t') { v.emplace_back(q2, c - q2); q2 = c + 1; }
+    if (v.size() >= 5 && (v[0] == "p" || v[0] == "r")) {
+      auto &l = v[0] == "p" ? x.playlists : x.recent;
+      if (l.size() < 12) l.push_back({v[1], v[2], v[3], v[4], (v[0] == "p" ? COVER_LIJST : COVER_RECENT) + (int) l.size()});
+    } else if (v.size() >= 2 && v[0] == "d" && x.apparaten.size() < 6) x.apparaten.push_back({v[1], "", v[1], ""});
+    p = e + 1;
+  }
+  x.lijst_geladen = true;
+  // hoesjes van de rijen (64 x 64) achter elkaar ophalen
+  auto vraag = [&](const std::vector<Lijst> &l, char w) {
+    for (size_t i = 0; i < l.size(); i++)
+      if (!x.covers.count(l[i].beeld))
+        nf::d().rij.push_back({nf::url_("/spotify/img?", "&e=" + x.spotify + "&s=l&w=" + std::string(1, w) + "&i=" + std::to_string(i)), l[i].beeld, 'l', 64 * 64 * 2});
+  };
+  vraag(x.playlists, 'p');
+  vraag(x.recent, 'r');
+  spotify_herbouwen();
+  nf::vrij_(buf);
+  return true;
+}
+// Elke 100 ms (in nf::tik's ritme): lijst bij openen en daarna elke 10 minuten
+inline void tik(uint32_t nu) {
+  Data &x = d();
+  if (!scherm_aan() || !op_audio() || x.spotify.empty() || x.lijst_bezig || (int32_t) (nu - x.lijst_volgende) < 0) return;
+  const std::string u = nf::url_("/spotify?", "&e=" + x.spotify);
+  if (u.empty()) return;
+  x.lijst_bezig = true;
+  x.lijst_volgende = nu + (x.lijst_geladen ? 600000u : 30000u);
+  nf::d().rij.insert(nf::d().rij.begin(), {u, 0, 'a', 8 * 1024});
+}
+inline void koppelen() {
+  licht_http::extra_open() = []() { return scherm_aan() && op_audio() && !entiteiten_().empty(); };
+  licht_http::extra_e() = entiteiten_;
+  licht_http::extra_lees() = lees_;
+  nf::extra_klaar() = klaar_;
+}
+inline void instellen(const std::string &kef, const std::string &sub, const std::string &spotify) {
+  d().kef = kef; d().sub_e = sub; d().spotify = spotify;
+  koppelen();
+}
+// ---- bediening (acties van het scherm) ----
+inline void bron_kiezen(int i) {
+  Data &x = d();
+  if (i < 0 || i >= BRONNEN || x.kef.empty() || !ha()) return;
+  x.bron = i;
+  ha()("media_player.select_source", {{"entity_id", x.kef}, {"source", bron_id()[i]}});
+  tonen();
+}
+inline void aanuit() {
+  Data &x = d();
+  if (x.kef.empty() || !ha()) return;
+  const bool aan = x.kef_state == "off" || x.kef_state.empty() || x.kef_state == "standby";
+  ha()(aan ? "media_player.turn_on" : "media_player.turn_off", {{"entity_id", x.kef}});
+  x.kef_state = aan ? "on" : "off";
+  tonen();
+}
+inline void shuffle_wissel() {
+  Data &x = d();
+  if (x.spotify.empty() || !ha()) return;
+  x.shuffle = !x.shuffle;
+  ha()("media_player.shuffle_set", {{"entity_id", x.spotify}, {"shuffle", x.shuffle ? "true" : "false"}});
+  tonen();
+}
+inline void repeat_wissel() {
+  static const char *rep[3] = {"off", "all", "one"};
+  Data &x = d();
+  if (x.spotify.empty() || !ha()) return;
+  x.repeat = (x.repeat + 1) % 3;
+  ha()("media_player.repeat_set", {{"entity_id", x.spotify}, {"repeat", rep[x.repeat]}});
+  tonen();
+}
+// a = SP_LIJST/SP_RECENT/SP_APPARAAT + i; false = geen geldige keuze
+inline bool lijst_actie(int a, int lijst0, int recent0, int apparaat0) {
+  Data &x = d();
+  const bool app = a >= apparaat0, rec = !app && a >= recent0;
+  const auto &l = app ? x.apparaten : rec ? x.recent : x.playlists;
+  const int i = a - (app ? apparaat0 : rec ? recent0 : lijst0);
+  if (i < 0 || i >= (int) l.size()) return false;
+  if (app) {
+    if (naar_apparaat()) naar_apparaat()(l[i]);
+    else if (ha() && !x.spotify.empty()) ha()("media_player.select_source", {{"entity_id", x.spotify}, {"source", l[i].naam}});
+    x.apparaat = l[i].naam;
+    spotify_herbouwen();
+  } else {
+    if (spelen()) spelen()(l[i]);
+    else if (ha() && !x.spotify.empty())
+      ha()("media_player.play_media", {{"entity_id", x.spotify}, {"media_content_id", l[i].uri}, {"media_content_type", l[i].type.empty() ? "playlist" : l[i].type}});
+    x.titel = l[i].naam; x.artiest = l[i].sub; x.cover = l[i].beeld; x.pos = 0; x.sp_state = "playing";
+    x.cover_van_titel = x.titel;   // hoes van de tegel tot HA de echte stand geeft
+    tonen();
+  }
+  return true;
+}
+}  // namespace audio
+
 inline std::function<void(const std::string &, Data)> &ha();
 // Schuifregelaar (volume 0-100, subwoofer -10..+10 dB): waarde live in het label, naar HA bij loslaten
 inline lv_obj_t *regelaar_(lv_obj_t *body, int y, const char *naam, int min, int max, lv_obj_t *&waarde, bool sub, const Fonts &f) {
@@ -1661,7 +1867,11 @@ inline lv_obj_t *regelaar_(lv_obj_t *body, int y, const char *naam, int min, int
     else lv_label_set_text(u.vol_w, std::to_string(v).c_str());
     if (lv_event_get_code(e) != LV_EVENT_RELEASED) return;
     audio::Data &x = audio::d();
-    if (is_sub) { x.sub = v; x.sub_bekend = true; if (audio::sub_zetten()) audio::sub_zetten()(v); }
+    if (is_sub) {
+      x.sub = v; x.sub_bekend = true;
+      if (audio::sub_zetten()) audio::sub_zetten()(v);
+      else if (!x.sub_e.empty() && ha()) ha()("number.set_value", {{"entity_id", x.sub_e}, {"value", std::to_string(v)}});
+    }
     else {
       x.volume = v;
       char lv[12]; snprintf(lv, sizeof(lv), "%.2f", v / 100.0f);
@@ -1694,6 +1904,7 @@ inline lv_obj_t *cover_vak_(lv_obj_t *p, int x, int y, int maat, int sleutel, co
   lv_obj_remove_flag(im, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_center(im);
   audio::cover_zetten_(im, sleutel, maat);
+  audio::wacht_(im, sleutel);
   return im;
 }
 static const char *ICO_NOOT = "\U000F0388", *ICO_SHUFFLE = "\U000F049D", *ICO_REPEAT = "\U000F0456", *ICO_SPEAKER = "\U000F04C3";

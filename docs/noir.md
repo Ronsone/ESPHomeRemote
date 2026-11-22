@@ -120,3 +120,22 @@ moet aan staan, anders komen de KEF-opdrachten niet aan.
 
 Audio- en Scènes-schermen in NOIR-stijl, letterwiel/QWERTY (tekstinvoer), Spotify, encoder, wallpaper
 Grand Line. Die gebruiken nu de bestaande Aggro600-pagina's (in skin NOIR).
+
+## Audio (KEF + Spotify) - 2026-11-22
+
+Tegel **Audio** opent NOIR Audio zodra `noir_kef_entity` of `noir_spotify` is ingevuld (anders de media-pagina zoals voorheen).
+
+- **Audio**: KEF aan/uit, "nu speelt" (tik = Spotify), ingangen (wifi, bluetooth, tv, optical, analog, usb), volume en subwoofer.
+- **Spotify**: hoes, titel/artiest, voortgang, shuffle/herhalen, jouw playlists, recent gespeeld, Spotify Connect-apparaten.
+  Play/pauze, vorige/volgende: fysieke toetsen. Volume: altijd de KEF.
+
+Substitutions:
+
+```yaml
+  noir_kef_entity: media_player.woonkamer_2
+  noir_kef_sub:    number.woonkamer_sw_gain
+  noir_spotify:    media_player.woonkamer_spotify_rons_rosenquist
+```
+
+De integratie levert `/api/esphomeremote/spotify` (lijsten uit het bladeren van de Spotify-media_player) en
+`/api/esphomeremote/spotify/img` (hoesjes 96/64 px RGB565). De stand komt uit `/states` (elke 2 s zolang het scherm open is).
