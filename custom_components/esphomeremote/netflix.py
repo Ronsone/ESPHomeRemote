@@ -11,7 +11,8 @@ Bronnen
 
 Voor de remote (geen HA-login, de gedeelde sleutel ?k=):
   GET /api/esphomeremote/netflix?k=..        {"w": "9-15 nov", "t": [titel...], "p": [titel...]}  (&f=tsv: tekstregels)
-      titel = {"i": tmdb-id, "n": naam, "z": zoeknaam, "j": jaar, "g": genre, "s": seizoenen, "l": leeftijd, "o": tekst}
+      titel = {"i": tmdb-id, "n": naam, "z": zoeknaam, "j": jaar, "g": genre, "s": seizoenen, "l": leeftijd, "o": tekst,
+               "w": wikidata-id, "x": Netflix-nummer (Wikidata P1874, CC0) - opent de serie direct op de LG}
   GET /api/esphomeremote/netflix/img?k=..&id=<tmdb>&s=p|b
       ruwe RGB565 (little endian) - p: poster 64x96, b: achtergrond 216x110 (onderaan uitlopend naar NOIR-zwart)
 """
@@ -37,6 +38,9 @@ _LOGGER = logging.getLogger(__name__)
 TUDUM = "https://www.netflix.com/tudum/top10/data/all-weeks-countries.tsv"
 TMDB = "https://api.themoviedb.org/3"
 TMDB_IMG = "https://image.tmdb.org/t/p/"
+WIKIDATA = "https://query.wikidata.org/sparql"
+WIKIDATA_UA = {"User-Agent": "ESPHomeRemote-HomeAssistant/1.0 (https://github.com/ronsone/ESPHomeRemote)",
+               "Accept": "application/sparql-results+json"}
 NETFLIX_PROVIDER = 8
 LAND = "NL"
 TAAL = "nl-NL"
@@ -163,7 +167,7 @@ class NetflixData:
 
     async def _details(self, tmdb_id: int, zoeknaam: str) -> dict:
         """Titel uit TMDB: Nederlandse naam en tekst, jaar, genre, seizoenen, Kijkwijzer-leeftijd, beeldpaden."""
-        d = await self._tmdb(f"/tv/{tmdb_id}", language=TAAL, append_to_response="content_ratings")
+        d = await self._tmdb(f"/tv/{tmdb_id}", language=TAAL, append_to_response="content_ratings,external_ids")
         if not d:
             return {"i": tmdb_id, "n": zoeknaam, "z": zoeknaam}
         leeftijd = ""
@@ -179,7 +183,38 @@ class NetflixData:
                 "j": (d.get("first_air_date") or "")[:4],
                 "g": ", ".join(g["name"] for g in (d.get("genres") or [])[:2])[:30],
                 "s": int(d.get("number_of_seasons") or 0), "l": leeftijd[:4],
-                "o": (d.get("overview") or "")[:300]}
+                "o": (d.get("overview") or "")[:300],
+                "w": str((d.get("external_ids") or {}).get("wikidata_id") or "")}   # Wikidata -> Netflix-nummer
+
+    async def _netflix_nummers(self, lijst: list[dict]) -> bool:
+        """Netflix-nummer (Wikidata P1874) bij titels met een Wikidata-id - daarmee opent de LG de serie direct.
+        Een vraag voor de hele lijst. True als er iets bijkwam."""
+        qids = sorted({t["w"] for t in lijst if t.get("w", "").startswith("Q") and not t.get("x")})
+        if not qids:
+            return False
+        q = "SELECT ?q ?n WHERE { VALUES ?q { " + " ".join(f"wd:{x}" for x in qids) + " } ?q wdt:P1874 ?n }"
+        sessie = async_get_clientsession(self.hass)
+        try:
+            async with sessie.get(WIKIDATA, params={"query": q, "format": "json"}, headers=WIKIDATA_UA, timeout=20) as r:
+                if r.status != 200:
+                    _LOGGER.warning("Wikidata: HTTP %s", r.status)
+                    return False
+                d = await r.json(content_type=None)
+        except (asyncio.TimeoutError, OSError, ValueError) as err:
+            _LOGGER.warning("Wikidata: %s", err)
+            return False
+        nrs = {}
+        for b in (d.get("results") or {}).get("bindings", []):
+            qid = b["q"]["value"].rsplit("/", 1)[-1]
+            nr = b["n"]["value"]
+            if nr.isdigit():
+                nrs.setdefault(qid, nr)
+        bij = False
+        for t in lijst:
+            if t.get("w") in nrs and not t.get("x"):
+                t["x"], bij = nrs[t["w"]], True
+        _LOGGER.info("Netflix-nummers via Wikidata: %d van %d titels", sum(1 for t in lijst if t.get("x")), len(lijst))
+        return bij
 
     async def _zoeken(self, naam: str) -> int:
         d = await self._tmdb("/search/tv", query=naam, language=TAAL)
@@ -269,6 +304,18 @@ class NetflixData:
                     for r in d.get("results", [])[:10]:
                         lijst.append(await self._details(int(r["id"]), r.get("original_name") or r.get("name") or ""))
                     self.populair, self.pop_tijd, veranderd = lijst, time.time(), True
+            # Titels van voor de Wikidata-stap (geen "w"): details opnieuw (eenmalig)
+            if self.sleutel:
+                for naam_l in ("top10", "populair"):
+                    lijst = getattr(self, naam_l)
+                    if any(t.get("i") and "w" not in t for t in lijst):
+                        nieuw = [await self._details(t["i"], t.get("z") or t.get("n") or "") if t.get("i") and "w" not in t else t
+                                 for t in lijst]
+                        setattr(self, naam_l, nieuw)
+                        veranderd = True
+            for lijst in (self.top10, self.populair):
+                if await self._netflix_nummers(lijst):
+                    veranderd = True
             if veranderd:
                 await self.hass.async_add_executor_job(self._bewaren)
 
@@ -302,7 +349,7 @@ class NetflixData:
         regels = [f"w\t{schoon(week_tekst(self.week) if self.week else '')}"]
         for soort, lijst in (("t", self.top10), ("p", self.populair)):
             for t in lijst:
-                regels.append("\t".join([soort, str(t.get("i", 0))] + [schoon(t.get(k)) for k in ("n", "z", "j", "g", "s", "l", "o")]))
+                regels.append("\t".join([soort, str(t.get("i", 0))] + [schoon(t.get(k)) for k in ("n", "z", "j", "g", "s", "l", "o", "x")]))
         return ("\n".join(regels) + "\n").encode()
 
     def json(self) -> bytes:

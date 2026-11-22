@@ -77,14 +77,15 @@ De Netflix-tegel van het TV-scherm start Netflix en opent het dashboard (functie
 - **Populair op Netflix**: TMDB discover (provider Netflix, regio NL), dagelijks.
 - **Laatst gestart**: de laatste 4 titels die je via de remote opende (global `noir_nf_laatst`).
 - Tik op een poster: detailscherm met achtergrond, jaar, genre, seizoenen, Kijkwijzer, Nederlandse tekst en
-  **Afspelen in Netflix** (actie `esphomeremote.tv_app` met `search`: Netflix opent op de naam - er is geen bron met
-  Netflix-nummers). Staat de tv uit, dan eerst de TV-activiteit en na 8 s openen.
+  **Afspelen in Netflix** (actie `esphomeremote.tv_app` met `content` = het Netflix-nummer uit Wikidata (P1874, via
+  de Wikidata-id van TMDB) - de LG opent de serie direct; zonder nummer opent alleen Netflix). Staat de tv uit, dan
+  eerst de TV-activiteit en na 8 s openen.
 - Fysieke knoppen op deze schermen: play/pauze (`media_play_pause`), stop, terug-/vooruitspoelen (webOS `STOP`,
   `REWIND`, `FASTFORWARD`), D-pad en OK. *Terug*: detail → dashboard → TV-scherm.
 
 De integratie (`netflix.py`) haalt alles op en levert het aan de remote via HA (`/api/esphomeremote/netflix`,
 posters als RGB565 64×96 en achtergrond 216×110 via `/api/esphomeremote/netflix/img`) - de remote zelf hoeft niet
-op internet. HA wel: `www.netflix.com`, `api.themoviedb.org`, `image.tmdb.org`. Posters, teksten en Populair
+op internet. HA wel: `www.netflix.com`, `api.themoviedb.org`, `image.tmdb.org`, `query.wikidata.org`. Posters, teksten en Populair
 vragen een gratis **TMDB-sleutel** (Instellingen → Apparaten & diensten → ESPHomeRemote → Configureren); zonder
 sleutel alleen de Top 10-titels. *This product uses the TMDB API but is not endorsed or certified by TMDB.*
 

@@ -1083,15 +1083,19 @@ inline void noir_scene(int index) {
   const char *naam = it["label"] | "";
   if (*naam) noir::toast(naam);
 }
-// NOIR Netflix-dashboard (2026-11-22): titel van het detailscherm in Netflix openen (zoeken op de naam - er is
-// geen Netflix-nummer) en bovenaan "Laatst gestart" zetten. Staat de tv uit: eerst de TV-activiteit, na 8 s openen.
+// NOIR Netflix-dashboard (2026-11-22): titel van het detailscherm in Netflix openen (Netflix-nummer uit Wikidata)
+// en bovenaan "Laatst gestart" zetten. Staat de tv uit: eerst de TV-activiteit, na 8 s openen.
 inline void noir_netflix_afspelen() {
   const noir::nf::Titel t = noir::nf::d().detail;
   if (t.zoek.empty()) return;
   noir::nf::laatst_toevoegen(t);
   noir::netflix_herbouwen();
+  // Met Netflix-nummer (Wikidata) opent de serie direct; zonder alleen Netflix (zoeken op naam opent niets op de LG)
   auto open = [t]() {
-    tk_cfg->ha_aufruf("esphomeremote.tv_app", {{"app", "netflix"}, {"search", t.zoek}, {"entity_id", noir::tv::entiteit()}});
+    if (!t.netflix.empty())
+      tk_cfg->ha_aufruf("esphomeremote.tv_app", {{"app", "netflix"}, {"content", t.netflix}, {"entity_id", noir::tv::entiteit()}});
+    else
+      tk_cfg->ha_aufruf("esphomeremote.tv_app", {{"app", "netflix"}, {"entity_id", noir::tv::entiteit()}});
   };
   if (!noir::tv_aan()) {
     noir_tv_starten();

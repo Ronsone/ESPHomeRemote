@@ -1109,7 +1109,7 @@ inline void scenes_bouwen(lv_obj_t *laag, const Fonts &f, const Beelden &bl, Jso
 // Bediening van de tv met de fysieke knoppen (play/pauze, stop, spoelen, D-pad, OK) - zie tv::taste.
 static const uint32_t NETFLIX_ROOD = 0xE50914;
 namespace nf {
-struct Titel { int id{0}; std::string naam, zoek, jaar, genre, leeftijd, tekst; int seizoenen{0}; };
+struct Titel { int id{0}; std::string naam, zoek, jaar, genre, leeftijd, tekst, netflix; int seizoenen{0}; };   // netflix = titelnummer (Wikidata)
 struct Beeld { uint8_t *px{nullptr}; lv_image_dsc_t dsc{}; };
 struct Wacht { lv_obj_t *img; int id; char soort; };
 struct Taak { std::string url; int id; char soort; size_t max; };   // soort 'j' json, 'p' poster, 'b' achtergrond
@@ -1245,6 +1245,7 @@ inline void klaar_() {
           Titel ti;
           ti.id = atoi(v[1].c_str()); ti.naam = v[2]; ti.zoek = v[3].empty() ? v[2] : v[3]; ti.jaar = v[4];
           ti.genre = v[5]; ti.seizoenen = atoi(v[6].c_str()); ti.leeftijd = v[7]; ti.tekst = v[8];
+          if (v.size() > 9) ti.netflix = v[9];
           (v[0] == "t" ? x.top10 : x.populair).push_back(ti);
         }
         p = e + 1;
@@ -1291,7 +1292,7 @@ inline void tik(uint32_t nu, bool zichtbaar) {
   if (t.url.empty()) { if (t.soort == 'j') x.bezig = false; return; }
   starten_(t);
 }
-// Laatst gestart: "id\tzoeknaam\n" x4 (global van max. 254 tekens, overleeft herstarten)
+// Laatst gestart: "id\tzoeknaam\tnetflixnr\n" x4 (global van max. 254 tekens, overleeft herstarten)
 inline void laatst_laden(const std::string &s) {
   Data &x = d();
   x.laatst.clear();
@@ -1303,7 +1304,10 @@ inline void laatst_laden(const std::string &s) {
     const size_t t1 = r.find('\t');
     if (t1 != std::string::npos && t1 + 1 < r.size()) {
       Titel t;
-      t.id = atoi(r.substr(0, t1).c_str()); t.zoek = r.substr(t1 + 1); t.naam = t.zoek;
+      t.id = atoi(r.substr(0, t1).c_str()); t.zoek = r.substr(t1 + 1);
+      const size_t t2 = t.zoek.find('\t');
+      if (t2 != std::string::npos) { t.netflix = t.zoek.substr(t2 + 1); t.zoek = t.zoek.substr(0, t2); }
+      t.naam = t.zoek;
       x.laatst.push_back(t);
     }
     p = e + 1;
@@ -1316,7 +1320,7 @@ inline void laatst_toevoegen(const Titel &t) {
   x.laatst.insert(x.laatst.begin(), t);
   if (x.laatst.size() > 4) x.laatst.resize(4);
   std::string s;
-  for (auto &l : x.laatst) s += std::to_string(l.id) + "\t" + l.zoek.substr(0, 40) + "\n";
+  for (auto &l : x.laatst) s += std::to_string(l.id) + "\t" + l.zoek.substr(0, 34) + "\t" + l.netflix.substr(0, 10) + "\n";
   if (x.bewaar) x.bewaar(s);
 }
 // Titel bij een actie (lijst*100 + i); volledige gegevens uit Top 10/Populair als de laatst-gestart-regel kort is
