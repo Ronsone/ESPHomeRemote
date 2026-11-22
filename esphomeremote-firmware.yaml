@@ -7161,16 +7161,21 @@ binary_sensor:
     name: "Ladekabel"
     device_class: battery_charging
     pin: {number: GPIO1, mode: {input: true, pullup: true}, inverted: true}
+    # 2026-11-22: strenger gefiltert - an einer Remote flackerte GPIO1 ohne Kabel (Popup "Wird geladen" und Display
+    # an/aus im Sekundentakt). Kabel zaehlt erst nach 3 s stabil, "weg" nach 5 s.
     filters:
-      - delayed_off: 2s
-      - delayed_on: 200ms
+      - delayed_off: 5s
+      - delayed_on: 3s
     on_press:
       # Nachladen bei vollem Akku (2026-10-28): der TP4056 beendet das Laden, die Zelle sinkt unter Last, er laedt
       # kurz nach - der Pin flackert dann alle paar Sekunden (Remote 2: ~2700x, Display 80 min an). Kommt das Kabel
       # binnen 2 min nach "weg" zurueck und ist der Akku >= 95 %, ist das kein Einstecken: nur das Symbol nachziehen.
       - lambda: |-
-          id(kabel_ruhig) = id(kabel_weg_ms) != 0 && millis() - id(kabel_weg_ms) < 120000 &&
-                            !std::isnan(id(akku_level).state) && id(akku_level).state >= 95.0f;
+          // 2026-11-22: kommt das "Kabel" binnen 10 min nach "weg" zurueck, ist es Flackern (Nachladen oder ein
+          // Kontaktproblem) - unabhaengig vom Akkustand: kein Wecken, kein Popup, nur das Symbol
+          id(kabel_ruhig) = (id(kabel_weg_ms) != 0 && millis() - id(kabel_weg_ms) < 600000) ||
+                            (id(kabel_weg_ms) != 0 && millis() - id(kabel_weg_ms) < 120000 &&
+                             !std::isnan(id(akku_level).state) && id(akku_level).state >= 95.0f);
       - script.execute: apply_charge_icon
       - script.execute: refresh_laden
       - if:
