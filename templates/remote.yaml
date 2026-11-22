@@ -3397,6 +3397,16 @@ script:
           lv_obj_add_flag(id(tt_ring), LV_OBJ_FLAG_HIDDEN);
           lv_label_set_text(id(tt_lbl), "Tippe irgendwo");
 
+  # Aus-Taste 3 s gehouden (2026-11-22): bevestigingsscherm Herunterfahren (zelfde als Menue > Wartung & Tests)
+  - id: power_lang
+    mode: restart
+    then:
+      - delay: 3s
+      - script.execute: wake_backlight
+      - lambda: |-
+          ESP_LOGI("aus", "Aus-Taste 3 s gehalten - Rueckfrage Herunterfahren");
+          id(frage_aus) = true;
+          tasten::seite_zeigen(id(page_restart), LV_SCR_LOAD_ANIM_MOVE_LEFT);
   # ---- Reinigungsmodus: Touch und Tasten clean_s Sekunden tot. Zurueck-Taste LANG
   # haelt ab. Das Display bleibt solange an (Timeout gestoppt).
   - id: clean_run
@@ -6994,6 +7004,9 @@ tca8418:
               if (!pressed && keycode == 13 && long_press) id(clean_mode) = false;
               return;
             }
+            // ---- Aus-Taste 3 s halten: vraag "Uitschakelen?" (2026-11-22). Werkt ook zonder WLAN/HA. De taste gaat
+            // daarnaast gewoon door naar de toetsindeling (kort drukken = tv aan/uit zoals altijd).
+            if (keycode == 102 && !id(button_test_mode)) { if (pressed) id(power_lang)->execute(); else id(power_lang)->stop(); }
             // ---- Touch-Test: nur die Zurueck-Taste beendet ihn, alles andere ignorieren.
             if (id(cur_page) == 36) {
               if (pressed && keycode == 13) id(nav_back)->execute();
