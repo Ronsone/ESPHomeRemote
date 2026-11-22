@@ -46,7 +46,9 @@ async def to_code(config):
     # een literal-pool niet meer binnen 256 KB van zijn code vindt ("l32r: literal target out of range"). Met deze
     # vlag staat elke pool in de eigen text-sectie van de functie - dan bestaat die grens niet meer. Alleen voor de
     # src-component (ESPHome zet build-flags op main.cpp), niet voor ESP-IDF zelf.
-    cg.add_build_flag("-mtext-section-literals")
+    # Native ESP-IDF-builds laten alleen -D/-W/-Wl-vlaggen door, daarom via de assembler (-Wa,): die zet de pools
+    # dan voor elke ENTRY-instructie, dus vlak voor de functie (zelfde effect als -mtext-section-literals).
+    cg.add_build_flag("-Wa,--text-section-literals")
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     cg.add(var.set_host(config["host"]))
