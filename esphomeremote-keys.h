@@ -1109,10 +1109,16 @@ inline void noir_netflix_afspelen() {
 }
 // Ingebouwde scène "Alles uit": lampen, tv, KEF en airco
 inline void noir_alles_uit() {
+  // Alle lampen in een aanroep (HA accepteert een kommalijst): niet zes aanroepen vlak achter elkaar, waarvan er
+  // onderweg (dock/API) een kan wegvallen. homeassistant.turn_off werkt voor light, switch en de rest.
+  std::string alle;
   for (const auto &l : noir::lampen()) {
-    const char *svc = l.entiteit.rfind("light.", 0) == 0 ? "light.turn_off" : l.entiteit.rfind("switch.", 0) == 0 ? "switch.turn_off" : "homeassistant.turn_off";
-    tk_cfg->ha_aufruf(svc, {{"entity_id", l.entiteit}});
+    if (l.entiteit.empty()) continue;
+    if (!alle.empty()) alle += ",";
+    alle += l.entiteit;
   }
+  ESP_LOGI("noir", "Alles uit: %s", alle.c_str());
+  if (!alle.empty()) tk_cfg->ha_aufruf("homeassistant.turn_off", {{"entity_id", alle}});
   if (!noir::tv::entiteit().empty()) tk_cfg->ha_aufruf("media_player.turn_off", {{"entity_id", noir::tv::entiteit()}});
   if (!noir::kef::entiteit().empty()) tk_cfg->ha_aufruf("media_player.turn_off", {{"entity_id", noir::kef::entiteit()}});
   noir::airco::uit();   // stuurt altijd het uit-signaal (IR), ongeacht de bewaarde stand
