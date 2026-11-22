@@ -83,6 +83,7 @@ void TCA8418Component::setup() {
 void IRAM_ATTR TCA8418Component::gpio_intr_(TCA8418Component *self) { self->interrupt_pending_ = true; }
 
 void TCA8418Component::loop() {
+  this->los_pruefen_();
   // Gesicherte Ereignisse vom Aufwachen zuerst (FORK 2026-10-20) - ohne Entprellung, sie kommen ohne Abstand
   if (!this->weck_ereignisse_.empty()) {
     this->fifo_wake_ = true;
@@ -284,13 +285,47 @@ void TCA8418Component::handle_event_(uint8_t event) {
     return;
   }
 
+  // Entprellen (2026-11-22, geprinte Tastenkappen: Doppelklicks ohne Testmodus). Die alte Sperre verwarf JEDES Ereignis
+  // im Fenster - auch das Loslassen, die Taste blieb dann "gedrueckt". Jetzt:
+  //  - doppelt gelesene Ereignisse fallen weg (Druecken waehrend schon gedrueckt, Loslassen ohne Druecken);
+  //  - Loslassen wird debounce_ms zurueckgehalten: kommt in der Zeit wieder ein Druecken derselben Taste, war es
+  //    Prellen - beides faellt weg, die Taste bleibt einfach gedrueckt. Sonst geht das Loslassen danach raus (loop).
   // Gemerkte Ereignisse vom Aufwachen kommen ohne Abstand (Druecken + Loslassen gleichzeitig) - nicht entprellen,
   // sonst ginge das Loslassen verloren und die Taste bliebe "gedrueckt" (FORK 2026-10-20).
-  if (!this->fifo_wake_ && this->debounce_ms_ > 0 && (now - this->last_event_ms_[keycode]) < this->debounce_ms_) {
-    return;
+  if (!this->fifo_wake_ && this->debounce_ms_ > 0) {
+    if (pressed) {
+      if (this->los_wartet_[keycode]) {   // Loslassen + Druecken im Fenster = Prellen
+        this->los_wartet_[keycode] = false;
+        if (this->los_wartend_ > 0) this->los_wartend_--;
+        ESP_LOGD(TAG, "Taste %u: Prellen ausgefiltert", keycode);
+        return;
+      }
+      if (this->pressed_state_[keycode] && now - this->press_start_ms_[keycode] < 150) return;   // doppelt gelesen
+    } else {
+      if (!this->pressed_state_[keycode] || this->los_wartet_[keycode]) return;   // doppelt gelesen
+      this->los_wartet_[keycode] = true;
+      this->los_ab_ms_[keycode] = now;
+      this->los_wartend_++;
+      return;
+    }
   }
-  this->last_event_ms_[keycode] = now;
+  this->melden_(keycode, pressed, now);
+}
 
+// Zurueckgehaltenes Loslassen nach debounce_ms ausgeben (aus loop)
+void TCA8418Component::los_pruefen_() {
+  if (this->los_wartend_ == 0) return;
+  const uint32_t now = millis();
+  for (uint8_t k = 1; k < 128; k++) {
+    if (!this->los_wartet_[k] || now - this->los_ab_ms_[k] < this->debounce_ms_) continue;
+    this->los_wartet_[k] = false;
+    if (this->los_wartend_ > 0) this->los_wartend_--;
+    this->melden_(k, false, this->los_ab_ms_[k]);   // Zeit des echten Loslassens (lange Druecke richtig erkennen)
+  }
+}
+
+void TCA8418Component::melden_(uint8_t keycode, bool pressed, uint32_t now) {
+  this->last_event_ms_[keycode] = now;
   bool long_press = false;
   if (pressed) {
     this->pressed_state_[keycode] = true;

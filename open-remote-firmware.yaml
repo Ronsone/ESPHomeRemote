@@ -58,7 +58,9 @@ substitutions:
   #                    entprellt der Tastenchip (TCA8418) selbst.
   #   key_long_ms      So lange gehalten = LANGER Druck (feuert schon waehrend des Haltens).
   #   key_dbl_ms       DOPPELDRUCK: hoechstens so viel Zeit zwischen Loslassen des ersten und Druecken des zweiten.
-  key_debounce_ms: "0"
+  #                    2026-11-22: neue Entprellung (tca8418.cpp) - Loslassen wird so lange zurueckgehalten; Prellen
+  #                    der (geprinteten) Kappen faellt weg, nichts geht mehr verloren. 0 = aus.
+  key_debounce_ms: "40"
   key_long_ms:     "400"
   key_dbl_ms:      "160"
   # Bluetooth-Tastatur: "true" = volle Tastatur (Ziffern und Buchstaben, Seite Tastatur), "digits" = nur

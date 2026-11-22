@@ -86,6 +86,8 @@ class TCA8418Component : public Component, public i2c::I2CDevice {
   bool configure_();
   void process_events_();
   void handle_event_(uint8_t event);
+  void melden_(uint8_t keycode, bool pressed, uint32_t now);
+  void los_pruefen_();
   static void IRAM_ATTR gpio_intr_(TCA8418Component *self);
 
   uint8_t rows_{5};
@@ -111,6 +113,10 @@ class TCA8418Component : public Component, public i2c::I2CDevice {
   uint32_t press_start_ms_[128] = {0};
   uint32_t last_event_ms_[128] = {0};
   bool pressed_state_[128] = {false};
+  // Entprellen (2026-11-22): zurueckgehaltenes Loslassen je Taste
+  bool los_wartet_[128] = {false};
+  uint32_t los_ab_ms_[128] = {0};
+  uint8_t los_wartend_{0};
 };
 
 }  // namespace tca8418
