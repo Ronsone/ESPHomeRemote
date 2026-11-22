@@ -1115,7 +1115,7 @@ inline void noir_alles_uit() {
   }
   if (!noir::tv::entiteit().empty()) tk_cfg->ha_aufruf("media_player.turn_off", {{"entity_id", noir::tv::entiteit()}});
   if (!noir::kef::entiteit().empty()) tk_cfg->ha_aufruf("media_player.turn_off", {{"entity_id", noir::kef::entiteit()}});
-  if (noir::airco::st_().aan) noir::airco::aanuit();   // stuurt het uit-signaal (IR)
+  noir::airco::uit();   // stuurt altijd het uit-signaal (IR), ongeacht de bewaarde stand
   for (auto &l : noir::lampen()) if (!l.state.empty()) l.state = "off";
   noir::lampen_tekst();
   noir::toast("Alles uit");

@@ -874,6 +874,9 @@ inline void temp_stap(int d) {
   sturen();
 }
 inline void aanuit() { st_().aan = !st_().aan; tonen(); sturen(150); }
+// Altijd uit sturen, ook als de remote denkt dat hij al uit staat (bv. aangezet met de originele afstandsbediening).
+// Het MHI-frame bevat de volledige stand, dus nogmaals 'uit' sturen is onschuldig.
+inline void uit() { st_().aan = false; tonen(); sturen(150); }
 inline void modus(int m) { st_().modus = m; st_().aan = true; tonen(); sturen(150); }
 inline void fan_volgende() {
   Stand &s = st_();
