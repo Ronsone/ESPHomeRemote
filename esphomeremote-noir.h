@@ -2422,8 +2422,8 @@ inline void zoek_bouwen(lv_obj_t *laag, const Fonts &f) {
     lv_obj_set_style_border_width(w, 1, 0);
     lv_obj_set_style_border_color(w, k(RAND), 0);
     lv_obj_set_style_border_opa(w, 115, 0);
-    lv_obj_remove_flag(w, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(w, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(w, (lv_obj_flag_t) (LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE | LV_OBJ_FLAG_SCROLL_CHAIN));
+    lv_obj_add_flag(w, (lv_obj_flag_t) (LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_PRESS_LOCK));
     lv_obj_t *band = detail(w, 4, (3 * st2 - 2) / 2 - 15, 76, 30, 0xBFC2C9, 38, 8);
     (void) band;
     WielUi &wu = wiel_ui();
@@ -2437,19 +2437,32 @@ inline void zoek_bouwen(lv_obj_t *laag, const Fonts &f) {
       lv_obj_align(l, LV_ALIGN_TOP_MID, 0, mid + dy[i] - lv_font_get_line_height(fo) / 2);
       wu.l[i] = l;
     }
-    // vegen draait, tikken zet het teken
+    // Tikken: bovenste deel = vorige letter, onderste deel = volgende, midden = letter zetten (werkt ook als de
+    // touchchip bij snel vegen geen tussenpunten levert). Vegen draait ook; vasthouden boven/onder draait door.
     lv_obj_add_event_cb(w, [](lv_event_t *e) {
-      static int32_t start_y = 0, gedraaid = 0;
+      static int32_t start_y = 0, gedraaid = 0, zone = 0;
+      static uint32_t sinds = 0, herhaald = 0;
       lv_indev_t *in = lv_indev_active();
+      lv_obj_t *o = (lv_obj_t *) lv_event_get_current_target(e);
       lv_point_t pt;
       if (in == nullptr) return;
       lv_indev_get_point(in, &pt);
+      lv_area_t a;
+      lv_obj_get_coords(o, &a);
+      const int32_t h = lv_area_get_height(&a), rel = pt.y - a.y1;
       const lv_event_code_t c = lv_event_get_code(e);
-      if (c == LV_EVENT_PRESSED) { start_y = pt.y; gedraaid = 0; }
-      else if (c == LV_EVENT_PRESSING) {
-        const int stappen = (pt.y - start_y) / 18;
-        if (stappen != 0) { audio::wiel_stap(-stappen); start_y += stappen * 18; gedraaid += stappen; }
-      } else if (c == LV_EVENT_RELEASED && gedraaid == 0) audio::wiel_zet();
+      if (c == LV_EVENT_PRESSED) {
+        start_y = pt.y; gedraaid = 0; sinds = lv_tick_get(); herhaald = 0;
+        zone = rel < h / 3 ? -1 : rel > 2 * h / 3 ? 1 : 0;
+      } else if (c == LV_EVENT_PRESSING) {
+        const int stappen = (pt.y - start_y) / 16;
+        if (stappen != 0) { audio::wiel_stap(-stappen); start_y += stappen * 16; gedraaid += stappen; }
+        else if (gedraaid == 0 && zone != 0 && lv_tick_get() - sinds > 450 && lv_tick_get() - herhaald > 120) {
+          audio::wiel_stap(zone); herhaald = lv_tick_get(); gedraaid = 100;   // vasthouden: doordraaien
+        }
+      } else if (c == LV_EVENT_RELEASED && gedraaid == 0) {
+        if (zone == 0) audio::wiel_zet(); else audio::wiel_stap(zone);
+      }
     }, LV_EVENT_ALL, nullptr);
     audio::wiel_tonen_();
   } else if (x.zoek_toetsen) {
