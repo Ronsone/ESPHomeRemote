@@ -1468,6 +1468,7 @@ inline void nf_detail_bouwen(lv_obj_t *laag, const Fonts &f) {
   plus(t.leeftijd);
   lv_obj_t *m = label(body, meta.c_str(), 0, 118, 216, f.f12, MUTED);
   lv_label_set_long_mode(m, LV_LABEL_LONG_MODE_DOTS);
+  lv_obj_set_height(m, lv_font_get_line_height(f.f12));   // een regel; te lang = "..." (anders loopt hij over de tekst)
   int y = 138;
   if (!t.tekst.empty()) {
     // drie regels, dan "..." - de knop blijft zo zonder scrollen in beeld
