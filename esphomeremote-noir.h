@@ -1900,11 +1900,45 @@ inline void zoek_ga() {
 }
 inline void zoek_veld_tik() { d().zoek_toetsen = !d().zoek_toetsen || d().zoek.empty(); zoek_herbouwen(); }
 inline void invoer_wissel() { d().invoer = 1 - d().invoer; d().zoek_toetsen = true; zoek_herbouwen(); }
+// Afspelen op de KEF (2026-11-22): Spotify speelt alleen als er een actief Connect-apparaat is. Daarom eerst de
+// KEF aan + ingang Wi-Fi, dan Spotify naar het KEF-apparaat sturen, en pas daarna (even later) play_media.
+inline std::string kef_apparaat_() {
+  for (const Lijst &l : d().apparaten) {
+    std::string n = l.naam;
+    for (char &c : n) c = (char) tolower((unsigned char) c);
+    if (n.find("kef") != std::string::npos || n.find("lsx") != std::string::npos) return l.naam;
+  }
+  return "";
+}
+inline void spelen_op_kef_(const std::string &uri, const std::string &type) {
+  Data &x = d();
+  if (x.spotify.empty() || !ha()) return;
+  bool wacht = false;
+  if (!x.kef.empty()) {
+    const bool kef_aan = x.kef_state == "on" || x.kef_state == "playing" || x.kef_state == "paused" || x.kef_state == "idle";
+    if (!kef_aan) { ha()("media_player.turn_on", {{"entity_id", x.kef}}); wacht = true; }
+    if (x.bron != 0) { ha()("media_player.select_source", {{"entity_id", x.kef}, {"source", bron_id()[0]}}); x.bron = 0; wacht = true; }
+  }
+  const std::string doel = kef_apparaat_();
+  if (!doel.empty() && x.apparaat != doel) {
+    ha()("media_player.select_source", {{"entity_id", x.spotify}, {"source", doel}});
+    x.apparaat = doel;
+    wacht = true;
+  }
+  static std::string w_uri, w_type;
+  w_uri = uri; w_type = type;
+  auto speel = [](lv_timer_t *) {
+    if (ha()) ha()("media_player.play_media", {{"entity_id", d().spotify}, {"media_content_id", w_uri}, {"media_content_type", w_type}});
+  };
+  if (!wacht) { speel(nullptr); return; }
+  lv_timer_t *t = lv_timer_create(speel, 2500, nullptr);   // KEF/Spotify Connect even tijd geven
+  lv_timer_set_repeat_count(t, 1);
+}
 inline void zoek_spelen(int i) {
   Data &x = d();
   if (i < 0 || i >= (int) x.zoek.size() || x.spotify.empty() || !ha()) return;
   const Lijst &l = x.zoek[i];
-  ha()("media_player.play_media", {{"entity_id", x.spotify}, {"media_content_id", l.uri}, {"media_content_type", l.type.empty() ? "track" : l.type}});
+  spelen_op_kef_(l.uri, l.type.empty() ? "track" : l.type);
   x.titel = l.naam; x.artiest = l.sub; x.cover = l.beeld; x.pos = 0; x.sp_state = "playing";
   x.cover_van_titel = x.titel;
   tonen();
@@ -1923,8 +1957,7 @@ inline bool lijst_actie(int a, int lijst0, int recent0, int apparaat0) {
     spotify_herbouwen();
   } else {
     if (spelen()) spelen()(l[i]);
-    else if (ha() && !x.spotify.empty())
-      ha()("media_player.play_media", {{"entity_id", x.spotify}, {"media_content_id", l[i].uri}, {"media_content_type", l[i].type.empty() ? "playlist" : l[i].type}});
+    else if (ha() && !x.spotify.empty()) spelen_op_kef_(l[i].uri, l[i].type.empty() ? "playlist" : l[i].type);
     x.titel = l[i].naam; x.artiest = l[i].sub; x.cover = l[i].beeld; x.pos = 0; x.sp_state = "playing";
     x.cover_van_titel = x.titel;   // hoes van de tegel tot HA de echte stand geeft
     tonen();
