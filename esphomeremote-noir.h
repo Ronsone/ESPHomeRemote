@@ -766,7 +766,7 @@ inline std::string bits() {
   std::string b = "0100101001110101110000110101100010100111";   // kop
   b += paar_(lsb_(s.modus, 3) + (s.aan ? "1" : "0") + "0000");
   b += paar_(lsb_(std::max(TEMP_MIN, std::min(TEMP_MAX, s.temp)) - 17, 4) + "0000");
-  b += paar_(lsb_(s.fan <= 4 ? s.fan : s.fan == 5 ? 6 : 9, 4) + "0000");   // HI = 6, ECO = 9
+  b += paar_(lsb_(s.fan <= 4 ? s.fan : s.fan == 5 ? 9 : 6, 4) + "0000");   // HI = 9, ECO = 6 (getest 2026-11-22; de decodering had ze andersom)
   // lamellen: horizontaal 0 = zwenken, 3 = midden; verticaal 0 = zwenken, 6 = midden
   const int hor = (s.swing & 2) ? 0 : 3, ver = (s.swing & 1) ? 0 : 6;
   const std::string paneel = lsb_(hor, 4) + lsb_(ver, 4);
