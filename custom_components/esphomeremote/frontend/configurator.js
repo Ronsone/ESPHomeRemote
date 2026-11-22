@@ -114,6 +114,7 @@ const INT_FNS = [
   ["noir_licht", "NOIR: Verlichting (Lampen)"],
   ["noir_inst", "NOIR: UI-Einstellungen (Skin, Wallpaper)"],
   ["noir_airco", "NOIR: Airco (Mitsubishi Heavy, Infrarot)"],
+  ["noir_test", "NOIR: Tastentest (Steuerkreuz/OK)"],
   ["mic_toggle", "Mikrofon an/aus"],
   ["clean", "Reinigungsmodus (Zurück lang beendet)"],
   ["power_off", "Remote ausschalten"],

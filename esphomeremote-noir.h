@@ -79,7 +79,7 @@ inline int rnd(int r) { return r >= 10 && r < LV_RADIUS_CIRCLE ? thema().radius 
 
 enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, SCENES = 104, AIRCO = 105, INSTELLINGEN = 113,
                    INST_AFRONDING = 129, INST_REMOTE = 130, DIM_GEREED = 128,
-                   AIRCO_AANUIT = 140, AIRCO_MIN = 141, AIRCO_PLUS = 142, AIRCO_FAN = 143, AIRCO_SWING = 144, AIRCO_HI = 145, AIRCO_ECO = 146,
+                   AIRCO_AANUIT = 140, AIRCO_MIN = 141, AIRCO_PLUS = 142, AIRCO_FAN = 143, AIRCO_SWING = 144, AIRCO_HI = 145, AIRCO_ECO = 146, KNOPTEST = 160, TEST_RESET = 161,
                    AIRCO_MODUS = 150 /* 150-154 */,
                    LAMP = 400 /* 400+i: lamp i op NOIR Verlichting */,
                    TV_AANUIT = 120, TV_APP = 200 /* 200-205: app-tegels */,
@@ -109,7 +109,7 @@ struct Beelden {
   const void *app[6]{};   // PS5, Switch, Netflix, YouTube, Cookie IPTV (nullptr = tekst), Plex
 };
 
-enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_AIRCO = 4, S_ANZ = 5 };
+enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_AIRCO = 4, S_TEST = 5, S_ANZ = 6 };
 
 struct Stand {
   lv_obj_t *laag{nullptr};                  // NOIR Thuis
@@ -127,7 +127,7 @@ struct Stand {
   std::function<void(int)> actie;   // wordt door de firmware ingevuld (tasten::noir_actie)
   const lv_font_t *toast_font{nullptr};
   // 2026-11-22: Verlichting en UI-instellingen, herbouwen na skinwissel
-  lv_obj_t *licht{nullptr}, *inst{nullptr}, *licht_body{nullptr}, *airco{nullptr};
+  lv_obj_t *licht{nullptr}, *inst{nullptr}, *licht_body{nullptr}, *airco{nullptr}, *test{nullptr};
   lv_obj_t *home{nullptr};
   std::function<JsonArrayConst()> items;    // tegels van NOIR Thuis (configurator), voor het herbouwen
 };
@@ -935,6 +935,134 @@ inline void airco_bouwen(lv_obj_t *laag, const Fonts &f) {
   airco::tonen();
 }
 
+// ---- NOIR Knoppentest (2026-11-22): D-pad en OK testen zonder tv/HA ---------------------------------------------
+// Zelfde weg als bij normaal gebruik (on_key -> driver met entprellen -> hier), maar er gaat niets naar buiten.
+// Raster 3 x 3: pijlen verplaatsen de cursor, OK telt op de tegel. "Verdacht" = dezelfde knop opnieuw ingedrukt
+// binnen 120 ms na loslaten (zo snel drukt niemand - dat is dender of een dubbel gelezen druk).
+namespace knoptest {
+struct Stand {
+  int cur{4};
+  int tel[6]{};                 // ^ v < > OK anders
+  int ok_op[9]{};
+  int verdacht{0};
+  uint32_t los_ms[128]{}, druk_ms[128]{};
+  std::string laatste{"Druk op een pijl of OK"};
+  lv_obj_t *tegel[9]{}, *info{nullptr}, *teller{nullptr}, *verd{nullptr}, *groot{nullptr};
+  lv_timer_t *flits{nullptr};
+  int flits_tegel{-1};
+};
+inline Stand &st_() { static Stand s; return s; }
+inline const char *naam_(int t) {
+  switch (t) { case 14: return "Op"; case 35: return "Neer"; case 15: return "Links"; case 32: return "Rechts";
+               case 34: return "OK"; default: return nullptr; }
+}
+inline void tonen() {
+  Stand &s = st_();
+  if (s.info == nullptr) return;
+  for (int i = 0; i < 9; i++) {
+    if (s.tegel[i] == nullptr) continue;
+    const bool sel = i == s.cur;
+    lv_obj_set_style_border_color(s.tegel[i], k(sel ? 0xBFC2C9 : RAND), 0);
+    lv_obj_set_style_border_opa(s.tegel[i], sel ? 230 : 90, 0);
+    lv_obj_set_style_border_width(s.tegel[i], sel ? 2 : 1, 0);
+    lv_label_set_text_fmt(lv_obj_get_child(s.tegel[i], -1), "%d", s.ok_op[i]);
+  }
+  lv_label_set_text(s.info, s.laatste.c_str());
+  lv_label_set_text_fmt(s.teller, "Op %d   Neer %d   Links %d   Rechts %d\nOK %d   overige %d",
+                        s.tel[0], s.tel[1], s.tel[2], s.tel[3], s.tel[4], s.tel[5]);
+  lv_label_set_text_fmt(s.verd, "Verdacht (dubbel < 120 ms): %d", s.verdacht);
+  lv_obj_set_style_text_color(s.verd, k(s.verdacht ? 0xF2F3F5 : 0x969AA3), 0);
+}
+// OK: tegel licht 180 ms op
+inline void flits(int i) {
+  Stand &s = st_();
+  if (i < 0 || i > 8 || s.tegel[i] == nullptr) return;
+  if (s.flits != nullptr) { lv_timer_delete(s.flits); s.flits = nullptr; if (s.flits_tegel >= 0 && s.tegel[s.flits_tegel]) lv_obj_remove_state(s.tegel[s.flits_tegel], LV_STATE_PRESSED); }
+  s.flits_tegel = i;
+  lv_obj_add_state(s.tegel[i], LV_STATE_PRESSED);   // zelfde look als aantikken
+  s.flits = lv_timer_create([](lv_timer_t *) {
+    Stand &z = st_();
+    if (z.flits_tegel >= 0 && z.tegel[z.flits_tegel] != nullptr) lv_obj_remove_state(z.tegel[z.flits_tegel], LV_STATE_PRESSED);
+    z.flits = nullptr;
+    z.flits_tegel = -1;
+  }, 180, nullptr);
+  lv_timer_set_repeat_count(s.flits, 1);
+}
+inline void reset() {
+  Stand &s = st_();
+  for (int &v : s.tel) v = 0;
+  for (int &v : s.ok_op) v = 0;
+  s.verdacht = 0;
+  s.cur = 4;
+  s.laatste = "Teller op nul";
+  tonen();
+}
+// Uit on_key (via tv::taste). true = afgehandeld; de menutoets (31) blijft vrij om eruit te komen.
+inline bool taste(int t, bool ingedrukt) {
+  if (t == 31 || t < 1 || t > 127) return false;
+  Stand &s = st_();
+  const uint32_t nu = lv_tick_get();
+  if (!ingedrukt) {
+    s.los_ms[t] = nu;
+    const char *n = naam_(t);
+    char b[64];
+    snprintf(b, sizeof(b), "%s%s losgelaten na %u ms", n ? n : "Toets ", n ? "" : std::to_string(t).c_str(), (unsigned) (nu - s.druk_ms[t]));
+    s.laatste = b;
+    tonen();
+    return true;
+  }
+  const bool dubbel = s.los_ms[t] != 0 && nu - s.los_ms[t] < 120;
+  if (dubbel) s.verdacht++;
+  s.druk_ms[t] = nu;
+  int r = s.cur / 3, c = s.cur % 3;
+  switch (t) {
+    case 14: s.tel[0]++; r = (r + 2) % 3; break;
+    case 35: s.tel[1]++; r = (r + 1) % 3; break;
+    case 15: s.tel[2]++; c = (c + 2) % 3; break;
+    case 32: s.tel[3]++; c = (c + 1) % 3; break;
+    case 34: s.tel[4]++; s.ok_op[s.cur]++; flits(s.cur); break;
+    default: s.tel[5]++; break;
+  }
+  s.cur = r * 3 + c;
+  char b[64];
+  const char *n = naam_(t);
+  if (n) snprintf(b, sizeof(b), "%s ingedrukt%s", n, dubbel ? "  \xE2\x80\x94 VERDACHT" : "");
+  else snprintf(b, sizeof(b), "Toets %d ingedrukt%s", t, dubbel ? "  \xE2\x80\x94 VERDACHT" : "");
+  s.laatste = b;
+  if (s.groot != nullptr) {   // laatste knop groot in beeld (rood-wit bij verdacht)
+    lv_label_set_text(s.groot, n ? n : std::to_string(t).c_str());
+    lv_obj_set_style_text_opa(s.groot, 255, 0);
+  }
+  tonen();
+  return true;
+}
+}  // namespace knoptest
+
+inline void test_bouwen(lv_obj_t *laag, const Fonts &f) {
+  knoptest::Stand &s = knoptest::st_();
+  lv_obj_t *body = body_maken(laag, false);
+  label(body, "Knoppentest", 0, 0, 150, f.f20 != nullptr ? f.f20 : f.f16, TEXT);
+  tekst_knop_(body, 150, 0, 66, 30, TEST_RESET, "Reset", f);
+  // raster links (3 x 3, 44 px), laatste knop groot rechts
+  for (int i = 0; i < 9; i++) {
+    lv_obj_t *b = knop(body, (i % 3) * 46, 36 + (i / 3) * 40, 42, 34, -1);
+    lv_obj_remove_flag(b, LV_OBJ_FLAG_CLICKABLE);   // alleen met de knoppen
+    lv_obj_t *l = label(b, "0", 0, 0, 38, f.f14, 0xE4E7EC);
+    lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(l);
+    s.tegel[i] = b;
+  }
+  s.groot = label(body, "", 140, 70, 76, f.f20 != nullptr ? f.f20 : f.f16, TEXT);
+  lv_obj_set_style_text_align(s.groot, LV_TEXT_ALIGN_CENTER, 0);
+  label(body, "laatste", 140, 100, 76, f.f12, MUTED);
+  lv_obj_set_style_text_align(lv_obj_get_child(body, -1), LV_TEXT_ALIGN_CENTER, 0);
+  s.info = label(body, "", 0, 156, 216, f.f12, TEXT);
+  s.teller = label(body, "", 0, 174, 216, f.f12, MUTED);
+  lv_label_set_long_mode(s.teller, LV_LABEL_LONG_MODE_WRAP);
+  s.verd = label(body, "", 0, 212, 216, f.f12, MUTED);
+  knoptest::tonen();
+}
+
 // ---- NOIR UI-instellingen (simulator build(13)) ----------------------------------------------------------------
 inline std::function<void(int, int, int)> &opslaan() { static std::function<void(int, int, int)> f; return f; }   // skin, wall, radius
 inline std::function<void(uint32_t *)> &eigen_kleuren() { static std::function<void(uint32_t *)> f; return f; }   // bg,surf,text,accent
@@ -1061,8 +1189,9 @@ inline void inst_bouwen(lv_obj_t *laag, const Fonts &f) {
   label(body, "Wallpaper", 0, 92, 216, f.f12, MUTED);
   keuzelijst_(body, 110, 1, f);
   char r[32];
-  snprintf(r, sizeof(r), "Afronding  %d px", t.radius);
-  knop_tekst_(knop(body, 0, 152, 216, 34, INST_AFRONDING), r, f);
+  snprintf(r, sizeof(r), "Hoeken %d px", t.radius);
+  knop_tekst_(knop(body, 0, 152, 104, 34, INST_AFRONDING), r, f);
+  knop_tekst_(knop(body, 112, 152, 104, 34, KNOPTEST), "Knoppentest", f);
   knop_tekst_(knop(body, 0, 194, 216, 34, INST_REMOTE), "Remote-instellingen", f);
 }
 
@@ -1088,6 +1217,10 @@ inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl, JsonArrayC
   airco_bouwen(s.airco, f);
   onderknop(s.airco, ICO_LINKS, "Terug", 12, TERUG, f);
   onderknop(s.airco, ICO_HOME, "Thuis", 124, THUIS, f);
+  s.test = laag_maken(home, bl);
+  test_bouwen(s.test, f);
+  onderknop(s.test, ICO_LINKS, "Terug", 12, TERUG, f);
+  onderknop(s.test, ICO_HOME, "Thuis", 124, THUIS, f);
   s.inst = laag_maken(home, bl);
   inst_bouwen(s.inst, f);
   onderknop(s.inst, ICO_LINKS, "Terug", 12, TERUG, f);
@@ -1118,7 +1251,7 @@ inline void licht_herbouwen() {
 
 inline lv_obj_t *laag_van(int seite) {
   Stand &s = st();
-  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : seite == S_AIRCO ? s.airco : s.laag;
+  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : seite == S_AIRCO ? s.airco : seite == S_TEST ? s.test : s.laag;
 }
 
 // Een NOIR-pagina tonen (de andere verbergen); de statusbalk verhuist mee
@@ -1140,6 +1273,7 @@ inline void zeigen_seite(int seite) {
 inline bool op_tv() { return st().zichtbaar && st().seite == S_TV; }
 inline bool op_licht() { return st().zichtbaar && st().seite == S_LICHT; }
 inline bool op_airco() { return st().zichtbaar && st().seite == S_AIRCO; }
+inline bool op_test() { return st().zichtbaar && st().seite == S_TEST; }
 
 // NOIR aan (laatst getoonde pagina) of helemaal weg (gewone Aggro600-startpagina zichtbaar)
 inline void zeigen(bool an) {
@@ -1166,9 +1300,11 @@ inline void alles_herbouwen() {
     keuze_dicht();
     const bool zicht = s.zichtbaar;
     const int seite = s.seite;
-    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst, s.airco};
+    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst, s.airco, s.test};
     for (lv_obj_t *o : weg) if (o != nullptr) lv_obj_delete(o);   // kop hangt aan een ervan
-    s.laag = s.tv = s.licht = s.inst = s.airco = nullptr;
+    s.laag = s.tv = s.licht = s.inst = s.airco = s.test = nullptr;
+    for (auto &t : knoptest::st_().tegel) t = nullptr;
+    knoptest::st_().info = nullptr;
     airco::ui() = airco::Ui();
     s.kop = s.klok = s.batt_txt = s.batt_fill = s.ha_dot = s.tv_status = s.thuis_body = s.licht_body = nullptr;
     for (Lamp &l : lampen()) l.lbl = nullptr;
@@ -1333,6 +1469,7 @@ inline bool airco_taste(int t, bool ingedrukt) {
   return true;
 }
 inline bool taste(int t, bool ingedrukt, bool op_home) {
+  if (op_home && op_test()) return knoptest::taste(t, ingedrukt);   // NOIR Knoppentest: alles blijft op het scherm
   if (op_home && op_airco()) return airco_taste(t, ingedrukt);   // NOIR Airco: pijlen = temperatuur, OK = aan/uit
   if (entiteit().empty() || !noir::ha() || !op_home || !op_tv()) return false;
   const char *knop = knop_van(t);

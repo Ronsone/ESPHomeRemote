@@ -700,6 +700,7 @@ inline void intern(const char *fn, int arg, const Ctx &c) {
   else if (!strcmp(fn, "noir_licht")) noir_actie(noir::LICHT);    // NOIR Verlichting (2026-11-22)
   else if (!strcmp(fn, "noir_inst")) noir_actie(noir::INSTELLINGEN);   // NOIR UI-instellingen
   else if (!strcmp(fn, "noir_airco")) noir_actie(noir::AIRCO);    // NOIR Airco (MHI via IR)
+  else if (!strcmp(fn, "noir_test")) noir_actie(noir::KNOPTEST);  // NOIR Knoppentest
   else if (!strcmp(fn, "skin")) skin_waehlen(arg);
   else if (!strcmp(fn, "mic_toggle")) toggle_mic->execute();
   else if (!strcmp(fn, "clean")) clean_run->execute();
@@ -1129,6 +1130,8 @@ inline void noir_actie(int a) {
     case noir::AIRCO_PLUS: noir::airco::temp_stap(1); break;
     case noir::AIRCO_FAN: noir::airco::fan_volgende(); break;
     case noir::AIRCO_SWING: noir::airco::swing_volgende(); break;
+    case noir::KNOPTEST: noir::knoptest::reset(); noir::zeigen_seite(noir::S_TEST); break;   // D-pad/OK testen
+    case noir::TEST_RESET: noir::knoptest::reset(); break;
     case noir::AIRCO_HI: noir::airco::fan_speciaal(5); break;     // HI POWER
     case noir::AIRCO_ECO: noir::airco::fan_speciaal(6); break;    // ECONO
     case noir::INSTELLINGEN: noir::zeigen_seite(noir::S_INST); break;   // NOIR UI-instellingen (simulator 13)
