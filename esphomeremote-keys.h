@@ -668,6 +668,7 @@ inline void skin_waehlen(int nr) {
     akzent_anwenden->execute();
   }
   noir::toast(skin::aufloesen(nr, tk_cfg->wurzel()).name.c_str());   // verdwijnt vanzelf (modus_anzeige bleef staan)
+  noir::eigen_gewisseld();   // NOIR-skin "Eigen" volgt de Aggro600-skin (2026-11-22)
 }
 
 inline void intern(const char *fn, int arg, const Ctx &c) {
@@ -696,6 +697,8 @@ inline void intern(const char *fn, int arg, const Ctx &c) {
   else if (!strcmp(fn, "skin_next")) skin_waehlen(skin::naechster(skin_nr->value(), tk_cfg->wurzel()));
   else if (!strcmp(fn, "noir_tv")) noir_actie(noir::TV);          // NOIR TV-scherm (tv + KEF aan via de TV-activiteit)
   else if (!strcmp(fn, "noir_thuis")) noir_actie(noir::THUIS);    // NOIR Thuis
+  else if (!strcmp(fn, "noir_licht")) noir_actie(noir::LICHT);    // NOIR Verlichting (2026-11-22)
+  else if (!strcmp(fn, "noir_inst")) noir_actie(noir::INSTELLINGEN);   // NOIR UI-instellingen
   else if (!strcmp(fn, "skin")) skin_waehlen(arg);
   else if (!strcmp(fn, "mic_toggle")) toggle_mic->execute();
   else if (!strcmp(fn, "clean")) clean_run->execute();
@@ -1046,11 +1049,17 @@ inline void noir_tv_starten() {
   noir::zeigen_seite(noir::S_TV);   // na het wisselen: de startpagina kan opnieuw opgebouwd zijn
 }
 // NOIR-builder (2026-11-22): tegels van NOIR Thuis = pagina "noir" uit het menu van de configurator
-inline JsonArrayConst noir_items() {
+inline JsonArrayConst noir_pagina_items(const char *id) {
   JsonArrayConst pages = tk_cfg->wurzel()["menu"]["pages"];
   for (JsonObjectConst p : pages)
-    if (strcmp(p["id"] | "", "noir") == 0) return p["items"].as<JsonArrayConst>();
+    if (strcmp(p["id"] | "", id) == 0) return p["items"].as<JsonArrayConst>();
   return JsonArrayConst();
+}
+inline JsonArrayConst noir_items() { return noir_pagina_items("noir"); }
+// NOIR Verlichting (2026-11-22): lampen van de configuratorpagina "noir_licht", anders substitution noir_lampen
+inline std::string &noir_lampen_tekst() { static std::string s; return s; }
+inline void noir_lampen_laden() {
+  if (!noir::lampen_uit_items(noir_pagina_items("noir_licht"))) noir::lampen_uit_tekst(noir_lampen_tekst().c_str());
 }
 // Tik op tegel i: zoals in het menu - page opent een menupagina, special een ingebouwde pagina, verder de stappen
 // van het item, of (zonder stappen) aan/uit van de entiteit
@@ -1077,6 +1086,7 @@ inline void noir_item_actie(int index) {
 }
 inline void noir_actie(int a) {
   if (a >= noir::ITEM) { noir_item_actie(a - noir::ITEM); return; }
+  if (a >= noir::LAMP && a < noir::LAMP + 12) { noir::lamp_schakelen(a - noir::LAMP, millis()); return; }
   if (a >= noir::TV_APP && a < noir::TV_APP + 6) {   // app/bron op de tv (script uit je dashboard)
     const int i = a - noir::TV_APP;
     if (!noir::tv_aan()) noir_tv_starten();
@@ -1103,10 +1113,22 @@ inline void noir_actie(int a) {
       media_home_ms->value() = 0;
       seite_zeigen(page_media, LV_SCR_LOAD_ANIM_MOVE_LEFT);
       break;
-    case noir::LICHT: noir_menupagina(noir_licht_seite()); break;
+    case noir::LICHT:   // eigen NOIR-scherm met lampen; zonder lampen de menupagina zoals voorheen
+      if (!noir::lampen().empty() || noir_licht_seite().empty()) noir::zeigen_seite(noir::S_LICHT);
+      else noir_menupagina(noir_licht_seite());
+      break;
     case noir::SCENES: noir_menupagina(noir_scenes_seite()); break;
     case noir::AIRCO: noir_menupagina(noir_airco_seite()); break;   // menupagina met je airco-knoppen (IR/HA)
-    case noir::INSTELLINGEN: open_menu_top->execute(); break;
+    case noir::INSTELLINGEN: noir::zeigen_seite(noir::S_INST); break;   // NOIR UI-instellingen (simulator 13)
+    case noir::INST_REMOTE: open_menu_top->execute(); break;              // het volledige Aggro600-menu
+    case noir::INST_AFRONDING: {                                          // 8 -> 20 px in stappen van 2
+      noir::Thema &t = noir::thema();
+      t.radius = t.radius >= 20 ? 8 : t.radius + 2;
+      noir::thema_bewaren_();
+      noir::alles_herbouwen();
+      break;
+    }
+    case noir::DIM_GEREED: noir::dimmer_dicht(); break;
     case noir::TERUG:
       if (noir::st().seite != noir::S_THUIS) noir::zeigen_seite(noir::S_THUIS);
       else nav_back->execute();
@@ -1117,7 +1139,8 @@ inline void noir_actie(int a) {
 }
 // Bij het opstarten (on_boot, na het LVGL-begin): laag bouwen, KEF-route en tegeldoelen instellen
 inline void noir_starten(bool aan, const char *kef, const char *licht, const char *scenes, const char *tv,
-                         const char *tv_activiteit, const char *tv_script, const char *tv_bronnen, const char *airco) {
+                         const char *tv_activiteit, const char *tv_script, const char *tv_bronnen, const char *airco,
+                         const char *lampen) {
   noir_airco_seite() = airco;
   noir::tv::entiteit() = strstr(tv, "niet_ingesteld") != nullptr ? "" : tv;
   noir_tv_activiteit() = tv_activiteit;
@@ -1131,6 +1154,17 @@ inline void noir_starten(bool aan, const char *kef, const char *licht, const cha
   noir::ha() = [](const std::string &svc, noir::Data d) { tk_cfg->ha_aufruf(svc, std::move(d)); };
   noir::st().toast_font = noir_i14->get_lv_font();
   noir::kef::melding() = [](const char *t) { if (!disp_off->value()) noir::toast(t); };
+  // NOIR Verlichting + UI-instellingen (2026-11-22)
+  noir_lampen_tekst() = lampen;
+  noir_lampen_laden();
+  noir::licht_http::url_basis() = []() -> std::string {
+    if (tk_cfg->host().empty() || tk_cfg->schluessel().empty()) return "";
+    return "http://" + tk_cfg->host() + "/api/esphomeremote/states?k=" + tk_cfg->schluessel();
+  };
+  noir::eigen_kleuren() = [](uint32_t *c) { c[0] = skin::f(skin::HG); c[1] = skin::f(skin::KARTE); c[2] = skin::f(skin::TEXT); c[3] = skin::f(skin::A0); };
+  noir::opslaan() = [](int sk, int wa, int ra) { noir_ui_skin->value() = sk; noir_ui_wall->value() = wa; noir_ui_radius->value() = ra; };
+  noir::thema_laden(noir_ui_skin->value(), noir_ui_wall->value(), noir_ui_radius->value());
+  noir::st().items = []() { return noir_items(); };
   if (aan) {
     noir::Beelden bl;
     bl.wall = noir_wall->get_lv_image_dsc();
@@ -1265,6 +1299,8 @@ inline void einrichten() {
       }
     }
     noir::thuis_herbouwen(noir_items());   // NOIR-builder: tegels uit de configurator (2026-11-22)
+    noir_lampen_laden();                    // NOIR Verlichting: pagina "noir_licht" uit de configurator
+    noir::licht_herbouwen();
     akzent_anwenden->execute();   // vor dem Neuaufbau: neue Teile holen akzent::farbe()
     apply_activity->execute();
     apply_home_layout->execute();

@@ -291,8 +291,10 @@ static const lv_style_prop_t PROPS[] = {LV_STYLE_BG_COLOR, LV_STYLE_BORDER_COLOR
                                         LV_STYLE_LINE_COLOR, LV_STYLE_ARC_COLOR, LV_STYLE_SHADOW_COLOR, LV_STYLE_BG_GRAD_COLOR,
                                         LV_STYLE_IMAGE_RECOLOR};
 
+// NOIR (2026-11-22) heeft eigen skins (esphomeremote-noir.h, UI-instellingen): die lagen markeren zich met USER_4
+static const lv_obj_flag_t EIGEN_THEMA = LV_OBJ_FLAG_USER_4;
 inline void faerben_(lv_obj_t *o, const std::vector<Eintrag> &q, const Palette &neu, bool knopf_theme) {
-  if (o == nullptr) return;
+  if (o == nullptr || lv_obj_has_flag(o, EIGEN_THEMA)) return;
   const bool aus = akzent::ausgenommen(o);   // Bluetooth-Blau: Akzent-Rollen bleiben, Grundfarben folgen dem Skin
   static const lv_part_t TEILE[] = {LV_PART_MAIN, LV_PART_SCROLLBAR, LV_PART_INDICATOR, LV_PART_KNOB, LV_PART_SELECTED, LV_PART_ITEMS, LV_PART_CURSOR};
   static const lv_state_t ZUST[] = {LV_STATE_DEFAULT, LV_STATE_CHECKED, LV_STATE_FOCUSED, LV_STATE_FOCUS_KEY, LV_STATE_PRESSED,

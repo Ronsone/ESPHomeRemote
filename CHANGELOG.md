@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-**NOIR / SIGNATURE home screen:** NOIR Thuis (from the NOIR Rev6 kit) as the start screen, ported to LVGL 9 on the existing drivers; physical volume keys control the KEF LSX II (`noir_kef_entity`) on every screen; skin NOIR. See [docs/noir.md](docs/noir.md).
+**NOIR / SIGNATURE home screen:** NOIR Thuis (from the NOIR Rev6 kit) as the start screen, ported to LVGL 9 on the existing drivers; physical volume keys control the KEF LSX II (`noir_kef_entity`) on every screen; skin NOIR. See [docs/noir.md](docs/noir.md). New: NOIR Lighting screen (tap = on/off, long-press = dimmer, live state from HA, lamps set in the configurator) and NOIR UI settings (skin, wallpaper, corner radius, saved on the remote).
 
 **Skins:** the whole interface can be recoloured – six built-in skins (Standard, Hell, OLED, Nord, Retro, Synthwave) and up to 8 own ones per remote, made in the configurator, optionally with a background image from the SD card. Switch on the remote (key/tile "Skin wechseln"), in the configurator (Settings › Anzeige) or with `select.<remote>_skin` in Home Assistant – instantly, without a restart. See [docs/skins.md](docs/skins.md).
 

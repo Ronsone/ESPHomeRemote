@@ -3710,5 +3710,14 @@
  "TV wie bisher": "TV as before",
  "Raster": "Grid",
  "Kacheln von NOIR Thuis auf den Standard zurücksetzen (TV, Audio, Verlichting, Scènes, Airco)?": "Reset the NOIR Thuis tiles to the default (TV, Audio, Verlichting, Scènes, Airco)?",
- "Eigene Kacheln löschen? NOIR Thuis zeigt dann wieder die eingebauten Kacheln.": "Delete own tiles? NOIR Thuis then shows the built-in tiles again."
+ "Eigene Kacheln löschen? NOIR Thuis zeigt dann wieder die eingebauten Kacheln.": "Delete own tiles? NOIR Thuis then shows the built-in tiles again.",
+ "NOIR: Verlichting (Lampen)": "NOIR: Lighting (lamps)",
+ "NOIR: UI-Einstellungen (Skin, Wallpaper)": "NOIR: UI settings (skin, wallpaper)",
+ "Lampenliste löschen? NOIR Verlichting nutzt dann wieder noir_lampen aus der YAML.": "Delete the lamp list? NOIR Lighting then uses noir_lampen from the YAML again.",
+ "Lampen für den Bildschirm Verlichting (Antippen = an/aus, lange drücken = dimmen).": "Lamps for the Lighting screen (tap = on/off, long-press = dim).",
+ "Lampe(n) eingestellt.": "lamp(s) set up.",
+ "Noch keine Liste – es gilt <code>noir_lampen</code> aus der YAML.": "No list yet – <code>noir_lampen</code> from the YAML applies.",
+ "Lampen bearbeiten": "Edit lamps",
+ "Lampenliste anlegen": "Create lamp list",
+ "Liste löschen": "Delete list"
 }

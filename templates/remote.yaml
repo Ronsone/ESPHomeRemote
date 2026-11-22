@@ -28,6 +28,9 @@ substitutions:
   noir_licht_seite:  ""
   noir_scenes_seite: ""
   noir_airco_seite:  ""   # id van de menupagina (configurator) voor de tegel Airco, leeg = menu
+  #   noir_lampen        lampen voor NOIR Verlichting: "Naam=entity|Naam=entity" (light.* = dimbaar). De pagina
+  #                      "noir_licht" in de configurator (NOIR -> Verlichting) gaat voor, zonder te compileren.
+  noir_lampen:        ""
   #   noir_tv_entity     media_player van de tv (status op het TV-scherm, D-pad/OK/Terug/Home via webostv.button)
   #   noir_tv_activiteit naam van de activiteit in de configurator die tv (IR) en KEF aanzet
   #   noir_tv_script     HA-script voor de app-tegels, krijgt tv_source mee
@@ -536,7 +539,7 @@ esphome:
             ESP_LOGI("sprache", "Sprache: Wahl %d, HA %s -> %s", id(sprache_wahl), id(sprache_ha_nl) ? "nl" : id(sprache_ha_en) ? "en" : "de",
                      sprache::niederlaendisch() ? "Niederlaendisch" : sprache::englisch() ? "Englisch" : "Deutsch");
         - script.execute: akzent_anwenden
-        - lambda: 'tasten::noir_starten(${noir_aan}, "${noir_kef_entity}", "${noir_licht_seite}", "${noir_scenes_seite}", "${noir_tv_entity}", "${noir_tv_activiteit}", "${noir_tv_script}", "${noir_tv_bronnen}", "${noir_airco_seite}");'   # NOIR (2026-11-21)
+        - lambda: 'tasten::noir_starten(${noir_aan}, "${noir_kef_entity}", "${noir_licht_seite}", "${noir_scenes_seite}", "${noir_tv_entity}", "${noir_tv_activiteit}", "${noir_tv_script}", "${noir_tv_bronnen}", "${noir_airco_seite}", "${noir_lampen}");'   # NOIR (2026-11-21)
         - lambda: 'id(mn)->set_spiegel(id(x_rechts)); touchpad::menue_anbinden();'   # X-Knopf rechts; Touchpad-Teile im Menue
         # Log-Ausfuehrlichkeit aus der Einstellung (Standard INFO).
         - if:
@@ -1618,6 +1621,9 @@ globals:
   # Sprache des Displays (2026-11-01): 0 = wie Home Assistant, 1 = Deutsch, 2 = Englisch; sprache_ha_en = HA ist nicht Deutsch
   - {id: sprache_wahl,   type: int,       restore_value: true,  initial_value: "0"}
   - {id: skin_nr,        type: int,       restore_value: true,  initial_value: "0"}   # Skin (esphomeremote-skin.h): 0-5 eingebaut, 10+ eigene
+  - {id: noir_ui_skin,   type: int,       restore_value: true,  initial_value: "0"}    # NOIR UI-instellingen (2026-11-22): skin 0-4
+  - {id: noir_ui_wall,   type: int,       restore_value: true,  initial_value: "0"}    #   wallpaper 0-2
+  - {id: noir_ui_radius, type: int,       restore_value: true,  initial_value: "16"}   #   afronding 8-20 px
   - {id: sprache_ha_nl,  type: bool,      restore_value: true,  initial_value: "false"}   # HA ist Niederlaendisch (2026-11-20)
   - {id: sprache_ha_en,  type: bool,      restore_value: true,  initial_value: "false"}   # X-Knopf rechts (2026-11-01): Seitenkoepfe gespiegelt, Animationen andersherum
   - {id: gesten_sens,    type: int,       restore_value: true,  initial_value: "1"}
@@ -2235,6 +2241,7 @@ interval:
     then:
       - lambda: |-
           noir::kef::herhaal_tik(millis());
+          noir::licht_http::tik(millis(), noir::op_licht() && id(cur_page) == 0 && !id(disp_off));   // NOIR Verlichting (2026-11-22)
           static uint32_t vorige = 0;
           if (millis() - vorige < 1000) return;
           vorige = millis();

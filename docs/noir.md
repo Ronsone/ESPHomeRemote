@@ -42,6 +42,24 @@ Tik op **TV** in NOIR Thuis:
 3. Fysieke toetsen op dit scherm: D-pad, OK, Terug en Home gaan via `webostv.button` naar de tv (pijlen herhalen bij
    ingedrukt houden). Volume blijft naar de KEF gaan. Terug/Thuis op het scherm gaan naar NOIR Thuis.
 
+## NOIR Verlichting
+
+Tegel *Verlichting* (of functie *NOIR: Verlichting (Lampen)* op een eigen tegel) opent een eigen NOIR-scherm (simulator
+`build(3)`): per lamp een brede knop *Naam · Aan/Uit* of, dimbaar, *Naam · 65%*. Tikken = aan/uit (`light.toggle`,
+`switch.toggle`), lang drukken op een dimbare lamp = dimvenster met schuifregelaar (`light.turn_on brightness_pct` bij
+loslaten, 0 = uit). De echte stand komt elke 3 s uit HA (`/api/esphomeremote/states`), alleen zolang het scherm open is.
+
+Lampen komen uit de configurator (NOIR → *Lampenliste anlegen*: menupagina `noir_licht`, elke kachel met entiteit is een
+lamp, `light.*` = dimbaar) – zonder te compileren. Zonder die pagina geldt `noir_lampen` uit de YAML.
+
+## NOIR UI-instellingen
+
+Het tandwiel op NOIR Thuis opent *UI-instellingen* (simulator `build(13)`): **Skin** (NOIR / Obsidian, SIGNATURE /
+Graphite, PURE / Black, Nautisch / Navy, Eigen = kleuren van de actieve Aggro600-skin), **Wallpaper** (Obsidian / satijn,
+Graphite / zacht, Effen) en **Afronding** (8-20 px, elke tik +2). Een skin kiezen zet ook afronding en wallpaper van die
+skin, zoals in de simulator. Alles wordt bewaard (globals `noir_ui_*`). *Alle instellingen (menu)* opent het gewone
+Aggro600-menu. De NOIR-lagen doen niet mee met de Aggro600-skins (vlag `LV_OBJ_FLAG_USER_4`).
+
 ## Instellen (je eigen `esphomeremote.yaml`)
 
 ```yaml
@@ -55,6 +73,7 @@ substitutions:
   noir_tv_activiteit: "TV"                       # naam van de activiteit in de configurator
   noir_tv_script: "script.tv_bron_kef"
   noir_tv_bronnen: "PS5 Gameconsole|HDMI 2|Netflix|YouTube|Cookie IPTV|Plex"
+  noir_lampen: "Woonkamer=light.woonkamer_lamp|Keuken=switch.keuken|Gang=light.lamp_gang"   # of leeg + configurator
 ```
 
 In HA: Instellingen → Apparaten → ESPHome → de remote → *Dit apparaat toestaan Home Assistant-acties uit te voeren*
@@ -62,5 +81,5 @@ moet aan staan, anders komen de KEF-opdrachten niet aan.
 
 ## Nog niet overgezet (volgende stappen uit de bouwgids)
 
-Audio-, Scènes- en Verlichting-schermen in NOIR-stijl met echte HA-status, letterwiel/QWERTY, Spotify, dimmer,
-encoder. Die gebruiken nu de bestaande Aggro600-pagina's (in skin NOIR).
+Audio- en Scènes-schermen in NOIR-stijl, letterwiel/QWERTY (tekstinvoer), Spotify, encoder, wallpaper
+Grand Line. Die gebruiken nu de bestaande Aggro600-pagina's (in skin NOIR).

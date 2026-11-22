@@ -16,6 +16,13 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <vector>
+#ifdef ESP_PLATFORM
+#include "esp_heap_caps.h"
+#include "esp_http_client.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#endif
 #include "esphome/components/menu/mdi_icons.h"
 
 namespace noir {
@@ -28,7 +35,51 @@ static const uint32_t BG = 0x07080A, SURF = 0x1A1C20, SURF2 = 0x101114, SURF_DIM
 
 // Acties van de tegels (zelfde betekenis als action() in de simulator: 101-104 tegels, 113 instellingen, 1 Terug,
 // 100 Thuis)
+// ---- NOIR-instellingen (2026-11-22, simulator build(13) "UI-instellingen") --------------------------------------
+// Skin = vier grondkleuren + afronding; alle vaste kleuren hierboven worden bij het tekenen omgezet zoals c() in de
+// simulator (k()). Skin 0 Obsidian geeft precies de kleuren van de simulator.
+struct Thema {
+  int skin{0};        // 0 Obsidian, 1 Graphite, 2 Pure Black, 3 Nautisch, 4 Eigen (kleuren van de actieve Aggro600-skin)
+  int wall{0};        // wallpaper: 0 Obsidian / satijn, 1 Graphite / zacht, 2 effen
+  int radius{16};     // afronding van knoppen en tegels (8-20 px)
+  uint32_t bg{BG}, surf{SURF}, text{TEXT}, accent{0xBFC2C9};
+};
+inline Thema &thema() { static Thema t; return t; }
+static const int SKINS = 5, WALLS = 3;
+static const char *SKIN_NAMEN = "NOIR / Obsidian\nSIGNATURE / Graphite\nPURE / Black\nNautisch / Navy\nEigen (Aggro600-skin)";
+static const char *WALL_NAMEN = "Obsidian / satijn\nGraphite / zacht\nEffen";
+// bg, surf, text, accent - radius - wallpaper (simulator preset_colors / preset_radii)
+static const uint32_t SKIN_KLEUR[4][4] = {{0x07080A, 0x1A1C20, 0xF2F3F5, 0xBFC2C9}, {0x0C0E12, 0x20242B, 0xF2F3F5, 0xD4D9E2},
+                                          {0x000000, 0x111214, 0xF5F5F5, 0xCCCCCC}, {0x071322, 0x14283A, 0xF5EEDC, 0xD6AB61}};
+static const int SKIN_RADIUS[4] = {16, 14, 12, 16}, SKIN_WALL[4] = {0, 1, 2, 2};
+
+inline uint32_t mix(uint32_t a, uint32_t b, int pct) {
+  uint32_t v = 0;
+  for (int s = 0; s < 24; s += 8) v |= ((((a >> s) & 255) * (100 - pct) + ((b >> s) & 255) * pct) / 100) << s;
+  return v;
+}
+// Vaste simulatorkleur -> kleur van de skin (simulator: c())
+inline uint32_t kleur(uint32_t x) {
+  const Thema &t = thema();
+  switch (x) {
+    case 0x07080A: case 0x08090B: return t.bg;
+    case 0x101216: return mix(t.bg, t.surf, 35);
+    case 0x1A1C20: case 0x14161A: case 0x22252A: return t.surf;
+    case 0x101114: return mix(t.surf, t.bg, 55);
+    case 0xF2F3F5: case 0xE4E7EC: case 0xEFF1F5: return t.text;
+    case 0x969AA3: case 0xB6BAC3: return mix(t.text, t.bg, 37);
+    case 0xBFC2C9: case 0xAEB4BF: case 0xD3D8E0: return t.accent;
+    case 0x383C43: case 0x36393F: return mix(t.surf, t.text, 14);
+    default: return x;
+  }
+}
+inline lv_color_t k(uint32_t c) { return lv_color_hex(kleur(c)); }
+// simulator box(): afrondingen vanaf 10 px volgen de skin
+inline int rnd(int r) { return r >= 10 && r < LV_RADIUS_CIRCLE ? thema().radius : r; }
+
 enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, SCENES = 104, AIRCO = 105, INSTELLINGEN = 113,
+                   INST_AFRONDING = 129, INST_REMOTE = 130, DIM_GEREED = 128,
+                   LAMP = 400 /* 400+i: lamp i op NOIR Verlichting */,
                    TV_AANUIT = 120, TV_APP = 200 /* 200-205: app-tegels */,
                    ITEM = 1000 /* 1000+i: tegel i van de configuratorpagina "noir" */ };
 
@@ -56,7 +107,7 @@ struct Beelden {
   const void *app[6]{};   // PS5, Switch, Netflix, YouTube, Cookie IPTV (nullptr = tekst), Plex
 };
 
-enum Seite : int { S_THUIS = 0, S_TV = 1, S_ANZ = 2 };
+enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_ANZ = 4 };
 
 struct Stand {
   lv_obj_t *laag{nullptr};                  // NOIR Thuis
@@ -73,10 +124,13 @@ struct Stand {
   bool zichtbaar{false};
   std::function<void(int)> actie;   // wordt door de firmware ingevuld (tasten::noir_actie)
   const lv_font_t *toast_font{nullptr};
+  // 2026-11-22: Verlichting en UI-instellingen, herbouwen na skinwissel
+  lv_obj_t *licht{nullptr}, *inst{nullptr}, *licht_body{nullptr};
+  lv_obj_t *home{nullptr};
+  std::function<JsonArrayConst()> items;    // tegels van NOIR Thuis (configurator), voor het herbouwen
 };
 inline Stand &st() { static Stand s; return s; }
 
-inline lv_color_t k(uint32_t c) { return lv_color_hex(c); }
 
 inline lv_obj_t *label(lv_obj_t *p, const char *t, int x, int y, int w, const lv_font_t *f, uint32_t kleur) {
   lv_obj_t *l = lv_label_create(p);
@@ -97,7 +151,7 @@ inline lv_obj_t *detail(lv_obj_t *p, int x, int y, int w, int h, uint32_t kleur,
   lv_obj_set_size(o, w, h);
   lv_obj_set_style_bg_color(o, k(kleur), 0);
   lv_obj_set_style_bg_opa(o, (lv_opa_t) opa, 0);
-  lv_obj_set_style_radius(o, radius, 0);
+  lv_obj_set_style_radius(o, rnd(radius), 0);
   lv_obj_remove_flag(o, (lv_obj_flag_t) (LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
   return o;
 }
@@ -108,13 +162,13 @@ inline void klik_(lv_event_t *e) {
 }
 
 // Knop zoals button() in de simulator (grafietvlak, verloop, fijne bovenrand, aparte ingedrukte toestand)
-inline lv_obj_t *knop(lv_obj_t *p, int x, int y, int w, int h, int actie) {
+inline lv_obj_t *knop(lv_obj_t *p, int x, int y, int w, int h, int actie, lv_event_code_t code = LV_EVENT_CLICKED) {
   lv_obj_t *b = lv_button_create(p);
   lv_obj_set_pos(b, x, y);
   lv_obj_set_size(b, w, h);
   lv_obj_set_style_bg_color(b, k(SURF), 0);
   lv_obj_set_style_bg_opa(b, 232, 0);
-  lv_obj_set_style_radius(b, h >= 60 ? 16 : h <= 34 ? 11 : 13, 0);
+  lv_obj_set_style_radius(b, rnd(h >= 60 ? 16 : h <= 34 ? 11 : 13), 0);
   lv_obj_set_style_border_width(b, 1, 0);
   lv_obj_set_style_border_color(b, k(RAND), 0);
   lv_obj_set_style_border_opa(b, 115, 0);
@@ -128,7 +182,7 @@ inline lv_obj_t *knop(lv_obj_t *p, int x, int y, int w, int h, int actie) {
   lv_obj_set_style_border_color(b, k(RAND_P), LV_STATE_PRESSED);
   lv_obj_set_style_border_opa(b, 210, LV_STATE_PRESSED);
   lv_obj_set_style_border_color(b, k(RAND), LV_STATE_FOCUSED);   // theme-focusrand niet blauw
-  lv_obj_add_event_cb(b, klik_, LV_EVENT_CLICKED, (void *) (intptr_t) actie);
+  lv_obj_add_event_cb(b, klik_, code, (void *) (intptr_t) actie);
   if (h >= 40) detail(b, 13, 0, w - 26, 1, LIJN, 42, 0);
   return b;
 }
@@ -164,7 +218,7 @@ inline void onderknop(lv_obj_t *p, const char *ico, const char *t, int x, int ac
   lv_obj_set_style_bg_opa(b, 180, 0);
   lv_obj_set_style_bg_color(b, k(SURF_DIM), 0);
   lv_obj_set_style_bg_grad_dir(b, LV_GRAD_DIR_NONE, 0);
-  lv_obj_set_style_radius(b, 14, 0);
+  lv_obj_set_style_radius(b, rnd(14), 0);
   lv_obj_set_style_border_opa(b, 65, 0);
   lv_obj_t *rij = lv_obj_create(b);
   lv_obj_remove_style_all(rij);
@@ -200,15 +254,17 @@ inline lv_obj_t *laag_maken(lv_obj_t *home, const Beelden &bl) {
   // Posities van kinderen tellen vanaf de binnenrand (padding) van page_home: terugschuiven naar de schermhoek
   lv_obj_set_pos(laag, -lv_obj_get_style_pad_left(home, LV_PART_MAIN), -lv_obj_get_style_pad_top(home, LV_PART_MAIN));
   lv_obj_set_size(laag, 240, 320);
-  lv_obj_set_style_bg_color(laag, k(BG), 0);
+  lv_obj_add_flag(laag, LV_OBJ_FLAG_USER_4);   // Aggro600-skins (esphomeremote-skin.h) laten NOIR met rust
+  const int wall = thema().wall;
+  lv_obj_set_style_bg_color(laag, k(wall == 1 ? 0x101216 : BG), 0);   // simulator: wallpaper_mode 1 iets lichter
   lv_obj_set_style_bg_opa(laag, LV_OPA_COVER, 0);
   lv_obj_remove_flag(laag, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(laag, LV_OBJ_FLAG_CLICKABLE);   // tikken op de achtergrond gaat niet door naar de Aggro600-startpagina
-  if (bl.wall != nullptr) {   // Obsidian-wallpaper, dekking 210 (wallpaper_mode 0)
+  if (bl.wall != nullptr && wall != 2) {   // Obsidian-wallpaper: satijn 210, zacht 100, effen = geen
     lv_obj_t *bg = lv_image_create(laag);
     lv_image_set_src(bg, bl.wall);
     lv_obj_set_pos(bg, 0, 0);
-    lv_obj_set_style_image_opa(bg, 210, 0);
+    lv_obj_set_style_image_opa(bg, wall == 0 ? 210 : 100, 0);
     lv_obj_remove_flag(bg, LV_OBJ_FLAG_CLICKABLE);
   }
   lv_obj_add_flag(laag, LV_OBJ_FLAG_HIDDEN);
@@ -391,11 +447,390 @@ inline void tv_bouwen(lv_obj_t *laag, const Fonts &f, const Beelden &bl) {
   onderknop(laag, ICO_HOME, "Thuis", 124, THUIS, f);
 }
 
+// ---- NOIR Verlichting (2026-11-22, simulator build(3)) ---------------------------------------------------------
+// Per lamp een brede knop "Naam  ·  Aan/Uit" of (dimbaar) "Naam  ·  65%". Tikken = aan/uit, lang drukken (dimbaar)
+// = dimvenster met schuifregler (light.turn_on brightness_pct bij loslaten). De echte stand komt elke 3 s uit HA
+// (dezelfde /api/esphomeremote/states als de menutegels), alleen zolang het scherm open is.
+using Data = std::map<std::string, std::string>;
+inline std::function<void(const std::string &, Data)> &ha();
+inline void tv_status(const std::string &state, const std::string &bron);
+struct Lamp {
+  std::string naam, entiteit;
+  bool dim{false};
+  std::string state;   // "" = nog onbekend
+  int bri{-1};         // 0-255, -1 = onbekend/uit
+  lv_obj_t *lbl{nullptr};
+};
+inline std::vector<Lamp> &lampen() { static std::vector<Lamp> l; return l; }
+inline bool lamp_aan(const Lamp &l) { return l.state == "on"; }
+inline int lamp_pct(const Lamp &l) { return l.bri < 0 ? -1 : (l.bri * 100 + 127) / 255; }
+
+inline void lamp_tekst(int i) {
+  if (i < 0 || i >= (int) lampen().size()) return;
+  Lamp &l = lampen()[i];
+  if (l.lbl == nullptr) return;
+  std::string w;
+  if (l.state.empty()) w = "\xE2\x80\x94";                                   // —
+  else if (l.state == "unavailable" || l.state == "unknown") w = "Niet bereikbaar";
+  else if (!lamp_aan(l)) w = "Uit";
+  else if (l.dim && lamp_pct(l) >= 0) w = std::to_string(std::max(1, lamp_pct(l))) + "%";
+  else w = "Aan";
+  const std::string t = l.naam + "  \xC2\xB7  " + w;
+  if (t != lv_label_get_text(l.lbl)) lv_label_set_text(l.lbl, t.c_str());
+  lv_obj_set_style_text_color(l.lbl, k(lamp_aan(l) ? 0xF2F3F5 : 0xE4E7EC), 0);
+  lv_obj_set_style_text_opa(l.lbl, lamp_aan(l) || l.state.empty() ? 255 : 170, 0);
+}
+inline void lampen_tekst() { for (int i = 0; i < (int) lampen().size(); i++) lamp_tekst(i); }
+
+// "Naam=entity|Naam=entity" (substitution noir_lampen) -> lampen()
+inline void lampen_uit_tekst(const char *lijst) {
+  lampen().clear();
+  std::string l = lijst != nullptr ? lijst : "";
+  while (!l.empty()) {
+    const size_t p = l.find('|');
+    const std::string d = l.substr(0, p);
+    const size_t is = d.find('=');
+    if (is != std::string::npos && is + 1 < d.size()) {
+      Lamp a;
+      a.naam = d.substr(0, is);
+      a.entiteit = d.substr(is + 1);
+      a.dim = a.entiteit.rfind("light.", 0) == 0;
+      lampen().push_back(a);
+    }
+    if (p == std::string::npos) break;
+    l = l.substr(p + 1);
+  }
+}
+// Items van de configuratorpagina "noir_licht" (label + entity; dim: false = niet dimbaar) -> lampen()
+inline bool lampen_uit_items(JsonArrayConst items) {
+  if (items.isNull() || items.size() == 0) return false;
+  std::vector<Lamp> neu;
+  for (JsonObjectConst it : items) {
+    const char *e = it["entity"] | "";
+    if (!*e) continue;
+    Lamp a;
+    a.entiteit = e;
+    a.naam = it["label"] | e;
+    a.dim = a.entiteit.rfind("light.", 0) == 0 && (it["dim"] | true);
+    for (const Lamp &o : lampen()) if (o.entiteit == a.entiteit) { a.state = o.state; a.bri = o.bri; }
+    neu.push_back(a);
+    if (neu.size() >= 12) break;
+  }
+  if (neu.empty()) return false;
+  lampen() = neu;
+  return true;
+}
+
+// HTTP-opvraag in een eigen taak (zoals Menue::abfrage_*): url_basis() = "http://host/api/esphomeremote/states?k=..."
+namespace licht_http {
+inline std::function<std::string()> &url_basis() { static std::function<std::string()> f; return f; }
+struct Abfrage { volatile bool laeuft{false}, fertig{false}; std::string url; char *buf{nullptr}; size_t len{0}; int status{0};
+                 void *taak{nullptr}; uint32_t volgende{0}; };
+inline Abfrage &a() { static Abfrage x; return x; }
+#ifdef ESP_PLATFORM
+inline void einmal_() {
+  Abfrage &q = a();
+  esp_http_client_config_t cfg = {};
+  cfg.url = q.url.c_str();
+  cfg.timeout_ms = 3000;
+  cfg.buffer_size = 512;
+  cfg.buffer_size_tx = std::max<int>(512, (int) q.url.size() + 256);
+  cfg.keep_alive_enable = false;
+  esp_http_client_handle_t c = esp_http_client_init(&cfg);
+  int status = -1;
+  size_t len = 0;
+  char *buf = nullptr;
+  if (c != nullptr && esp_http_client_open(c, 0) == ESP_OK) {
+    esp_http_client_fetch_headers(c);
+    status = esp_http_client_get_status_code(c);
+    if (status == 200) {
+      const size_t MAX = 4096;
+      buf = (char *) heap_caps_malloc(MAX, MALLOC_CAP_SPIRAM);
+      while (buf != nullptr && len < MAX) {
+        int r = esp_http_client_read(c, buf + len, MAX - len);
+        if (r <= 0) break;
+        len += r;
+      }
+    }
+  }
+  if (c != nullptr) { esp_http_client_close(c); esp_http_client_cleanup(c); }
+  q.buf = buf; q.len = len; q.status = status; q.fertig = true;
+}
+inline void taak_(void *) { for (;;) { ulTaskNotifyTake(pdTRUE, portMAX_DELAY); einmal_(); } }
+inline void starten_() {
+  Abfrage &q = a();
+  if (q.taak == nullptr) {
+    static StaticTask_t tcb;
+    const size_t groesse = 4096;
+    auto *stapel = (StackType_t *) heap_caps_malloc(groesse, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (stapel != nullptr) q.taak = xTaskCreateStaticPinnedToCore(taak_, "noir_licht", groesse, nullptr, 1, stapel, &tcb, tskNO_AFFINITY);
+  }
+  if (q.taak == nullptr) return;
+  q.laeuft = true;
+  q.fertig = false;
+  xTaskNotifyGive((TaskHandle_t) q.taak);
+}
+#else
+inline void starten_() {}
+#endif
+// Antwort {"light.x": ["on", 128, -1, ""], ...} -> lampen()
+inline void auswerten_() {
+  Abfrage &q = a();
+  if (q.status == 200 && q.buf != nullptr && q.len > 0) {
+    JsonDocument doc;
+    if (!deserializeJson(doc, q.buf, q.len)) {
+      for (Lamp &l : lampen()) {
+        JsonArrayConst v = doc[l.entiteit];
+        if (v.isNull()) continue;
+        l.state = v[0] | "";
+        l.bri = v[1] | -1;
+      }
+      lampen_tekst();
+    }
+  }
+#ifdef ESP_PLATFORM
+  if (q.buf != nullptr) heap_caps_free(q.buf);
+#endif
+  q.buf = nullptr;
+  q.len = 0;
+}
+// Elke 100 ms vanuit de firmware; open = NOIR Verlichting is te zien (scherm aan, startpagina)
+inline void tik(uint32_t nu, bool open) {
+  Abfrage &q = a();
+  if (q.fertig) { q.fertig = false; q.laeuft = false; auswerten_(); }
+  if (!open || q.laeuft || lampen().empty() || !url_basis() || (int32_t) (nu - q.volgende) < 0) return;
+  q.volgende = nu + 3000;
+  const std::string basis = url_basis()();
+  if (basis.empty()) return;
+  std::string lijst;
+  for (const Lamp &l : lampen()) { lijst += l.entiteit; lijst += ","; }
+  q.url = basis + "&e=" + lijst;
+  starten_();
+}
+inline void snel(uint32_t nu, uint32_t ms) { a().volgende = nu + ms; }   // na een tik: stand kort daarna opnieuw
+}  // namespace licht_http
+
+inline void lamp_schakelen(int i, uint32_t nu) {
+  if (i < 0 || i >= (int) lampen().size() || !ha()) return;
+  Lamp &l = lampen()[i];
+  const std::string &e = l.entiteit;
+  const char *svc = e.rfind("light.", 0) == 0 ? "light.toggle" : e.rfind("switch.", 0) == 0 ? "switch.toggle" : "homeassistant.toggle";
+  ha()(svc, {{"entity_id", e}});
+  if (!l.state.empty()) { l.state = lamp_aan(l) ? "off" : "on"; lamp_tekst(i); }   // meteen tonen, HA bevestigt
+  licht_http::snel(nu, 900);
+}
+
+// Dimvenster (simulator open_dimmer): over alles op lv_layer_top
+struct Dimmer { lv_obj_t *over{nullptr}, *waarde{nullptr}; int lamp{-1}; };
+inline Dimmer &dimmer() { static Dimmer d; return d; }
+inline void dimmer_dicht() {
+  Dimmer &d = dimmer();
+  if (d.over != nullptr) { lv_obj_delete_async(d.over); d.over = nullptr; d.waarde = nullptr; }
+  d.lamp = -1;
+}
+inline void dimmer_waarde_(lv_event_t *e) {
+  lv_obj_t *sl = (lv_obj_t *) lv_event_get_target(e);
+  const int v = lv_slider_get_value(sl);
+  Dimmer &d = dimmer();
+  if (d.waarde != nullptr) lv_label_set_text_fmt(d.waarde, "%d%%", v);
+  if (lv_event_get_code(e) != LV_EVENT_RELEASED || d.lamp < 0 || d.lamp >= (int) lampen().size() || !ha()) return;
+  Lamp &l = lampen()[d.lamp];
+  if (v <= 0) { ha()("light.turn_off", {{"entity_id", l.entiteit}}); l.state = "off"; }
+  else { ha()("light.turn_on", {{"entity_id", l.entiteit}, {"brightness_pct", std::to_string(v)}}); l.state = "on"; l.bri = (v * 255 + 50) / 100; }
+  lamp_tekst(d.lamp);
+  licht_http::snel(lv_tick_get(), 1500);
+}
+inline void dimmer_open(int i) {
+  Stand &s = st();
+  if (i < 0 || i >= (int) lampen().size() || !lampen()[i].dim || dimmer().over != nullptr) return;
+  if (lv_indev_active() != nullptr) lv_indev_wait_release(lv_indev_active());   // loslaten = geen tik op de knop
+  Lamp &l = lampen()[i];
+  Dimmer &d = dimmer();
+  d.lamp = i;
+  d.over = lv_obj_create(lv_layer_top());
+  lv_obj_remove_style_all(d.over);
+  lv_obj_add_flag(d.over, LV_OBJ_FLAG_USER_4);
+  lv_obj_set_size(d.over, 240, 320);
+  lv_obj_set_style_bg_color(d.over, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(d.over, 175, 0);
+  lv_obj_add_flag(d.over, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_remove_flag(d.over, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *m = lv_obj_create(d.over);
+  lv_obj_set_pos(m, 16, 80);
+  lv_obj_set_size(m, 208, 162);
+  lv_obj_set_style_bg_color(m, k(SURF), 0);
+  lv_obj_set_style_bg_opa(m, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(m, rnd(16), 0);
+  lv_obj_set_style_border_width(m, 1, 0);
+  lv_obj_set_style_border_color(m, k(RAND), 0);
+  lv_obj_set_style_border_opa(m, LV_OPA_60, 0);
+  lv_obj_set_style_pad_all(m, 0, 0);
+  lv_obj_set_style_shadow_width(m, 0, 0);
+  lv_obj_remove_flag(m, LV_OBJ_FLAG_SCROLLABLE);
+  label(m, l.naam.c_str(), 16, 15, 176, s.fonts.f16, TEXT);
+  const int pct = lamp_aan(l) ? std::max(1, lamp_pct(l) < 0 ? 100 : lamp_pct(l)) : 0;
+  d.waarde = label(m, "", 16, 45, 176, s.fonts.f20 != nullptr ? s.fonts.f20 : s.fonts.f16, TEXT);
+  lv_label_set_text_fmt(d.waarde, "%d%%", pct);
+  lv_obj_t *sl = lv_slider_create(m);
+  lv_obj_set_pos(sl, 18, 88);
+  lv_obj_set_size(sl, 172, 5);
+  lv_slider_set_range(sl, 0, 100);
+  lv_slider_set_value(sl, pct, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(sl, k(0x36393F), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(sl, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(sl, k(0xBFC2C9), LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(sl, k(0xF2F3F5), LV_PART_KNOB);
+  lv_obj_set_style_pad_all(sl, 6, LV_PART_KNOB);
+  lv_obj_set_style_outline_width(sl, 0, LV_STATE_FOCUSED);
+  lv_obj_set_ext_click_area(sl, 14);
+  lv_obj_add_event_cb(sl, dimmer_waarde_, LV_EVENT_VALUE_CHANGED, nullptr);
+  lv_obj_add_event_cb(sl, dimmer_waarde_, LV_EVENT_RELEASED, nullptr);
+  lv_obj_t *g = knop(m, 12, 116, 184, 32, DIM_GEREED);
+  lv_obj_t *gl = label(g, "Gereed", 0, 0, 174, s.fonts.f12, 0xE4E7EC);
+  lv_obj_set_style_text_align(gl, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_center(gl);
+}
+inline void lang_(lv_event_t *e) { dimmer_open((int) (intptr_t) lv_event_get_user_data(e) - LAMP); }
+
+inline void licht_bouwen(lv_obj_t *laag, const Fonts &f) {
+  Stand &s = st();
+  lv_obj_t *body = s.licht_body = body_maken(laag, true);
+  label(body, "Verlichting", 0, 0, 216, f.f20 != nullptr ? f.f20 : f.f16, TEXT);
+  if (lampen().empty()) {
+    lv_obj_t *l = label(body, "Nog geen lampen. Configurator \xE2\x86\x92 NOIR \xE2\x86\x92 Verlichting.", 0, 42, 216, f.f12, MUTED);
+    lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
+  }
+  for (int i = 0; i < (int) lampen().size(); i++) {
+    Lamp &l = lampen()[i];
+    lv_obj_t *b = knop(body, 0, 42 + i * 55, 216, 47, LAMP + i, LV_EVENT_SHORT_CLICKED);
+    l.lbl = label(b, "", 0, 0, 200, f.f12, 0xE4E7EC);
+    lv_obj_set_style_text_align(l.lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(l.lbl);
+    if (l.dim) {   // dimbaar: lichte rand, lang drukken = dimmer
+      lv_obj_add_event_cb(b, lang_, LV_EVENT_LONG_PRESSED, (void *) (intptr_t) (LAMP + i));
+      lv_obj_set_style_border_color(b, k(0xBFC2C9), 0);
+      lv_obj_set_style_border_opa(b, 85, 0);
+    }
+  }
+  if (!lampen().empty()) {
+    lv_obj_t *h = label(body, "Lang drukken = dimmen", 0, 42 + (int) lampen().size() * 55, 216, f.f12, MUTED);
+    lv_obj_set_style_text_align(h, LV_TEXT_ALIGN_CENTER, 0);
+  }
+  lampen_tekst();
+}
+
+// ---- NOIR UI-instellingen (simulator build(13)) ----------------------------------------------------------------
+inline std::function<void(int, int, int)> &opslaan() { static std::function<void(int, int, int)> f; return f; }   // skin, wall, radius
+inline std::function<void(uint32_t *)> &eigen_kleuren() { static std::function<void(uint32_t *)> f; return f; }   // bg,surf,text,accent
+inline void alles_herbouwen();
+
+// Kleuren van skin nr in thema() zetten (wall/radius blijven)
+inline void thema_kleuren_() {
+  Thema &t = thema();
+  uint32_t c[4] = {SKIN_KLEUR[0][0], SKIN_KLEUR[0][1], SKIN_KLEUR[0][2], SKIN_KLEUR[0][3]};
+  if (t.skin >= 0 && t.skin < 4) for (int i = 0; i < 4; i++) c[i] = SKIN_KLEUR[t.skin][i];
+  else if (t.skin == 4 && eigen_kleuren()) eigen_kleuren()(c);
+  t.bg = c[0]; t.surf = c[1]; t.text = c[2]; t.accent = c[3];
+}
+// Bij het opstarten (opgeslagen waarden) - vóór bouwen()
+inline void thema_laden(int skin, int wall, int radius) {
+  Thema &t = thema();
+  t.skin = std::max(0, std::min(SKINS - 1, skin));
+  t.wall = std::max(0, std::min(WALLS - 1, wall));
+  t.radius = std::max(8, std::min(20, radius));
+  thema_kleuren_();
+}
+inline void thema_bewaren_() { if (opslaan()) opslaan()(thema().skin, thema().wall, thema().radius); }
+// Skin kiezen zoals select_preset() in de simulator: kleuren + afronding + wallpaper van de preset
+inline void skin_kiezen(int nr) {
+  Thema &t = thema();
+  t.skin = std::max(0, std::min(SKINS - 1, nr));
+  if (t.skin < 4) { t.radius = SKIN_RADIUS[t.skin]; t.wall = SKIN_WALL[t.skin]; }
+  thema_kleuren_();
+  thema_bewaren_();
+  alles_herbouwen();
+}
+// Aggro600-skin gewisseld: bij "Eigen" volgt NOIR
+inline void eigen_gewisseld() { if (thema().skin == 4) alles_herbouwen(); }
+
+inline void inst_keuze_(lv_event_t *e) {
+  const int soort = (int) (intptr_t) lv_event_get_user_data(e);
+  const int v = lv_dropdown_get_selected((lv_obj_t *) lv_event_get_target(e));
+  if (soort == 0) { if (v != thema().skin) skin_kiezen(v); return; }
+  if (v == thema().wall) return;
+  thema().wall = std::max(0, std::min(WALLS - 1, v));
+  thema_bewaren_();
+  alles_herbouwen();
+}
+inline lv_obj_t *keuzelijst_(lv_obj_t *body, const char *opties, int y, int gekozen, int soort, const Fonts &f) {
+  lv_obj_t *d = lv_dropdown_create(body);
+  lv_obj_set_pos(d, 0, y);
+  lv_obj_set_size(d, 216, 37);
+  lv_dropdown_set_options(d, opties);
+  lv_dropdown_set_selected(d, gekozen);
+  if (f.f12 != nullptr) lv_obj_set_style_text_font(d, f.f12, 0);
+  lv_obj_set_style_bg_color(d, k(SURF), 0);
+  lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(d, rnd(10), 0);
+  lv_obj_set_style_border_width(d, 1, 0);
+  lv_obj_set_style_border_color(d, k(RAND), 0);
+  lv_obj_set_style_border_opa(d, LV_OPA_60, 0);
+  lv_obj_set_style_shadow_width(d, 0, 0);
+  lv_obj_set_style_outline_width(d, 0, LV_STATE_FOCUSED);
+  lv_obj_set_style_pad_left(d, 10, 0);
+  lv_obj_set_style_pad_right(d, 10, 0);
+  lv_obj_set_style_pad_top(d, 10, 0);
+  lv_obj_set_style_text_color(d, k(TEXT), 0);
+  if (f.ico != nullptr) {   // pijltje uit de MDI-font (Inter heeft geen LVGL-symbolen)
+    static const char *PIJL = "\U000F0140";   // mdi:chevron-down
+    lv_dropdown_set_symbol(d, PIJL);
+    lv_obj_set_style_text_font(d, f.ico, LV_PART_INDICATOR);
+    lv_obj_set_style_text_color(d, k(MUTED), LV_PART_INDICATOR);
+  }
+  lv_obj_add_event_cb(d, inst_keuze_, LV_EVENT_VALUE_CHANGED, (void *) (intptr_t) soort);
+  lv_obj_t *lijst = lv_dropdown_get_list(d);
+  if (lijst != nullptr) {
+    lv_obj_add_flag(lijst, LV_OBJ_FLAG_USER_4);   // hangt aan het scherm, niet aan de laag
+    if (f.f12 != nullptr) lv_obj_set_style_text_font(lijst, f.f12, 0);
+    lv_obj_set_style_bg_color(lijst, k(0x14161A), 0);
+    lv_obj_set_style_bg_opa(lijst, LV_OPA_COVER, 0);
+    lv_obj_set_style_text_color(lijst, k(TEXT), 0);
+    lv_obj_set_style_border_color(lijst, k(RAND), 0);
+    lv_obj_set_style_radius(lijst, rnd(10), 0);
+    const lv_state_t st_[] = {LV_STATE_DEFAULT, LV_STATE_CHECKED, LV_STATE_PRESSED, (lv_state_t) (LV_STATE_CHECKED | LV_STATE_PRESSED)};
+    for (lv_state_t z : st_) {
+      lv_obj_set_style_bg_color(lijst, lv_color_hex(mix(thema().bg, thema().accent, 24)), (lv_style_selector_t) (LV_PART_SELECTED | z));
+      lv_obj_set_style_text_color(lijst, k(TEXT), (lv_style_selector_t) (LV_PART_SELECTED | z));
+    }
+  }
+  return d;
+}
+inline void knop_tekst_(lv_obj_t *b, const char *t, const Fonts &f) {
+  lv_obj_t *l = label(b, t, 0, 0, lv_obj_get_style_width(b, LV_PART_MAIN) - 10, f.f12, 0xE4E7EC);
+  lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_center(l);
+}
+inline void inst_bouwen(lv_obj_t *laag, const Fonts &f) {
+  lv_obj_t *body = body_maken(laag, true);
+  const Thema &t = thema();
+  label(body, "UI-instellingen", 0, 0, 216, f.f20 != nullptr ? f.f20 : f.f16, TEXT);
+  label(body, "Skin", 0, 39, 216, f.f12, MUTED);
+  keuzelijst_(body, SKIN_NAMEN, 58, t.skin, 0, f);
+  label(body, "Wallpaper", 0, 111, 216, f.f12, MUTED);
+  keuzelijst_(body, WALL_NAMEN, 130, t.wall, 1, f);
+  char r[32];
+  snprintf(r, sizeof(r), "Afronding  %d px", t.radius);
+  knop_tekst_(knop(body, 0, 183, 216, 36, INST_AFRONDING), r, f);
+  label(body, "Remote", 0, 242, 216, f.f12, MUTED);
+  knop_tekst_(knop(body, 0, 262, 216, 36, INST_REMOTE), "Alle instellingen (menu)", f);
+}
+
 // Lagen over page_home bouwen (eenmalig). home = page_home->obj.
 inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl, JsonArrayConst thuis_items = JsonArrayConst()) {
   Stand &s = st();
   if (s.toast_font == nullptr) s.toast_font = f.f14;
   if (s.laag != nullptr || home == nullptr) return;
+  s.home = home;
   s.fonts = f;
   s.beelden = bl;
   s.laag = laag_maken(home, bl);
@@ -404,29 +839,48 @@ inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl, JsonArrayC
   onderknop(s.laag, ICO_HOME, "Thuis", 124, THUIS, f);
   s.tv = laag_maken(home, bl);
   tv_bouwen(s.tv, f, bl);
+  s.licht = laag_maken(home, bl);
+  licht_bouwen(s.licht, f);
+  onderknop(s.licht, ICO_LINKS, "Terug", 12, TERUG, f);
+  onderknop(s.licht, ICO_HOME, "Thuis", 124, THUIS, f);
+  s.inst = laag_maken(home, bl);
+  inst_bouwen(s.inst, f);
+  onderknop(s.inst, ICO_LINKS, "Terug", 12, TERUG, f);
+  onderknop(s.inst, ICO_HOME, "Thuis", 124, THUIS, f);
   kop_maken(s.laag, f);
 }
 
 // Nieuwe configuratie: tegels van NOIR Thuis opnieuw opbouwen (statusbalk en Terug/Thuis blijven)
+inline void body_vervangen_(lv_obj_t *laag, lv_obj_t *&body, const std::function<void()> &maak) {
+  if (laag == nullptr) return;
+  if (body != nullptr) { lv_obj_delete(body); body = nullptr; }
+  maak();
+  lv_obj_move_background(body);
+  // wallpaper blijft onderop
+  for (uint32_t c = 0; c < lv_obj_get_child_count(laag); c++)
+    if (lv_obj_check_type(lv_obj_get_child(laag, c), &lv_image_class)) { lv_obj_move_background(lv_obj_get_child(laag, c)); break; }
+}
 inline void thuis_herbouwen(JsonArrayConst items) {
   Stand &s = st();
-  if (s.laag == nullptr) return;
-  if (s.thuis_body != nullptr) { lv_obj_delete(s.thuis_body); s.thuis_body = nullptr; }
-  thuis_bouwen(s.laag, s.fonts, s.beelden, items);
-  lv_obj_move_background(s.thuis_body);
-  // wallpaper blijft onderop
-  if (lv_obj_get_child_count(s.laag) > 0 && lv_obj_check_type(lv_obj_get_child(s.laag, 0), &lv_image_class) == false) {
-    for (uint32_t c = 0; c < lv_obj_get_child_count(s.laag); c++)
-      if (lv_obj_check_type(lv_obj_get_child(s.laag, c), &lv_image_class)) { lv_obj_move_background(lv_obj_get_child(s.laag, c)); break; }
-  }
+  body_vervangen_(s.laag, s.thuis_body, [&]() { thuis_bouwen(s.laag, s.fonts, s.beelden, items); });
+}
+// Nieuwe lampenlijst (configurator): NOIR Verlichting opnieuw
+inline void licht_herbouwen() {
+  Stand &s = st();
+  for (Lamp &l : lampen()) l.lbl = nullptr;
+  body_vervangen_(s.licht, s.licht_body, [&]() { licht_bouwen(s.licht, s.fonts); });
 }
 
-inline lv_obj_t *laag_van(int seite) { return seite == S_TV ? st().tv : st().laag; }
+inline lv_obj_t *laag_van(int seite) {
+  Stand &s = st();
+  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : s.laag;
+}
 
 // Een NOIR-pagina tonen (de andere verbergen); de statusbalk verhuist mee
 inline void zeigen_seite(int seite) {
   Stand &s = st();
   if (s.laag == nullptr) return;
+  if (seite != S_LICHT) dimmer_dicht();
   s.seite = seite;
   s.zichtbaar = true;
   for (int i = 0; i < S_ANZ; i++) {
@@ -436,8 +890,10 @@ inline void zeigen_seite(int seite) {
     else lv_obj_add_flag(l, LV_OBJ_FLAG_HIDDEN);
   }
   if (s.kop != nullptr) { lv_obj_set_parent(s.kop, laag_van(seite)); lv_obj_move_foreground(s.kop); }
+  if (seite == S_LICHT) licht_http::snel(lv_tick_get(), 0);   // meteen de echte stand ophalen
 }
 inline bool op_tv() { return st().zichtbaar && st().seite == S_TV; }
+inline bool op_licht() { return st().zichtbaar && st().seite == S_LICHT; }
 
 // NOIR aan (laatst getoonde pagina) of helemaal weg (gewone Aggro600-startpagina zichtbaar)
 inline void zeigen(bool an) {
@@ -445,7 +901,34 @@ inline void zeigen(bool an) {
   if (s.laag == nullptr) return;
   if (an) { zeigen_seite(s.seite); return; }
   s.zichtbaar = false;
+  dimmer_dicht();
   for (int i = 0; i < S_ANZ; i++) if (laag_van(i) != nullptr) lv_obj_add_flag(laag_van(i), LV_OBJ_FLAG_HIDDEN);
+}
+
+// Skin/wallpaper/afronding gewisseld: alle lagen opnieuw (na de lopende gebeurtenis - de keuzelijst die het
+// meldde, wordt zelf verwijderd)
+inline void alles_herbouwen() {
+  static bool gepland = false;
+  if (gepland || st().laag == nullptr) return;
+  gepland = true;
+  lv_async_call([](void *) {
+    gepland = false;
+    Stand &s = st();
+    if (s.laag == nullptr || s.home == nullptr) return;
+    thema_kleuren_();   // "Eigen": kleuren van de Aggro600-skin zoals die nu is
+    dimmer_dicht();
+    const bool zicht = s.zichtbaar;
+    const int seite = s.seite;
+    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst};
+    for (lv_obj_t *o : weg) if (o != nullptr) lv_obj_delete(o);   // kop hangt aan een ervan
+    s.laag = s.tv = s.licht = s.inst = nullptr;
+    s.kop = s.klok = s.batt_txt = s.batt_fill = s.ha_dot = s.tv_status = s.thuis_body = s.licht_body = nullptr;
+    for (Lamp &l : lampen()) l.lbl = nullptr;
+    bouwen(s.home, s.fonts, s.beelden, s.items ? s.items() : JsonArrayConst());
+    tv_status(s.tv_state, "");
+    s.seite = seite;
+    if (zicht) zeigen_seite(seite);
+  }, nullptr);
 }
 // Bij elk laden van de startpagina: de laatst getoonde NOIR-pagina (als NOIR aan staat)
 inline void bij_home() { if (st().aan) zeigen(true); }
@@ -485,9 +968,8 @@ inline void toast(const char *tekst, uint32_t ms = 1500) {
   static lv_timer_t *weg = nullptr;
   if (t == nullptr) {
     t = lv_label_create(lv_layer_top());
-    lv_obj_set_style_bg_color(t, k(SURF), 0);
+    lv_obj_add_flag(t, LV_OBJ_FLAG_USER_4);
     lv_obj_set_style_bg_opa(t, 240, 0);
-    lv_obj_set_style_text_color(t, k(TEXT), 0);
     if (st().toast_font != nullptr) lv_obj_set_style_text_font(t, st().toast_font, 0);
     lv_obj_set_style_radius(t, 14, 0);
     lv_obj_set_style_border_width(t, 1, 0);
@@ -497,6 +979,9 @@ inline void toast(const char *tekst, uint32_t ms = 1500) {
     lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 6);
     lv_obj_remove_flag(t, LV_OBJ_FLAG_CLICKABLE);
   }
+  lv_obj_set_style_bg_color(t, k(SURF), 0);   // skin kan intussen gewisseld zijn
+  lv_obj_set_style_text_color(t, k(TEXT), 0);
+  lv_obj_set_style_border_color(t, k(RAND_P), 0);
   lv_label_set_text(t, tekst);
   lv_obj_remove_flag(t, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(t);
@@ -506,7 +991,6 @@ inline void toast(const char *tekst, uint32_t ms = 1500) {
 }
 
 // ---- HA-aanroep en ingedrukt-houden (gedeeld door KEF en TV) ---------------------------------------------------
-using Data = std::map<std::string, std::string>;
 // HA-aanroep van de firmware (tk_cfg->ha_aufruf: via wifi, Bluetooth-link of dock, met wachtrij na het wekken)
 inline std::function<void(const std::string &, Data)> &ha() {
   static std::function<void(const std::string &, Data)> z;

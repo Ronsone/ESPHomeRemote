@@ -111,6 +111,8 @@ const INT_FNS = [
   ["skin", "Skin wählen …"],
   ["noir_tv", "NOIR: TV-Bildschirm (TV + KEF an)"],
   ["noir_thuis", "NOIR: Startbildschirm (Thuis)"],
+  ["noir_licht", "NOIR: Verlichting (Lampen)"],
+  ["noir_inst", "NOIR: UI-Einstellungen (Skin, Wallpaper)"],
   ["mic_toggle", "Mikrofon an/aus"],
   ["clean", "Reinigungsmodus (Zurück lang beendet)"],
   ["power_off", "Remote ausschalten"],
@@ -7387,13 +7389,25 @@ const EinstTab = {
     return [
       t("TV", "noir:tv", 0, 0, 3, 2, { steps: [{ t: "int", fn: "noir_tv" }] }),
       { t: "special", label: "Audio", icon: "noir:audio", x: 3, y: 0, w: 3, h: 2, page: "media" },
-      t("Verlichting", "noir:licht", 0, 2, 3, 2, { steps: [{ t: "int", fn: "menu_open" }] }),
+      t("Verlichting", "noir:licht", 0, 2, 3, 2, { steps: [{ t: "int", fn: "noir_licht" }] }),
       t("Scènes", "noir:scenes", 3, 2, 3, 2, { steps: [{ t: "int", fn: "menu_open" }] }),
       t("Airco", "mdi:air-conditioner", 0, 4, 6, 2, { steps: [{ t: "int", fn: "menu_open" }] }),
     ];
   },
+  _noirLicht() { return (this.cfg.menu?.pages || []).find((p) => p.id === "noir_licht"); },
   _noirClick(a, t) {
     const m = this.menu;
+    if (a === "noir_licht") {   // NOIR Verlichting (2026-11-22): Lampen = Eintraege der Menueseite "noir_licht"
+      if (!this._noirLicht()) { m.pages.push({ id: "noir_licht", title: "NOIR Verlichting", items: [] }); this._touch(); }
+      this._seiteMerken?.("menu");
+      this.s.mode = "menu"; this.s.mpage = "noir_licht"; this.s.mitem = null;
+      return;
+    }
+    if (a === "noir_licht_weg") {
+      if (!confirm("Lampenliste löschen? NOIR Verlichting nutzt dann wieder noir_lampen aus der YAML.")) return;
+      m.pages = m.pages.filter((p) => p.id !== "noir_licht");
+      this._touch(); return;
+    }
     if (a === "noir_edit" || a === "noir_new") {
       if (!this._noirSeite()) { m.pages.push({ id: "noir", title: "NOIR Thuis", items: this._noirStandard() }); this._touch(); }
       this._seiteMerken?.("menu");
@@ -7451,6 +7465,17 @@ const EinstTab = {
           <li><b>Symbole</b>: alle aus der Symbolauswahl des Menüs; dazu <code>noir:tv</code>, <code>noir:audio</code>, <code>noir:licht</code>, <code>noir:scenes</code> für die NOIR-Linienzeichen.</li>
         </ul>
         <small class="note">Die Seite „noir“ erscheint auch in der Liste des Menü-Editors; im normalen Menü der Remote wird sie nur angezeigt, wenn du irgendwo auf sie verlinkst.</small>
+        <h3><ha-icon icon="mdi:lightbulb-outline"></ha-icon> NOIR Verlichting</h3>
+        <p>Lampen für den Bildschirm Verlichting (Antippen = an/aus, lange drücken = dimmen). ${this._noirLicht() ? `${(this._noirLicht().items || []).filter((i) => i.entity).length} Lampe(n) eingestellt.` : "Noch keine Liste – es gilt <code>noir_lampen</code> aus der YAML."}</p>
+        <div class="inl">
+          <button class="btn" data-a="noir_licht"><ha-icon icon="mdi:pencil"></ha-icon>${this._noirLicht() ? "Lampen bearbeiten" : "Lampenliste anlegen"}</button>
+          ${this._noirLicht() ? `<button class="btn ghost" data-a="noir_licht_weg"><ha-icon icon="mdi:delete-outline"></ha-icon>Liste löschen</button>` : ""}
+        </div>
+        <ul class="noirhilfe">
+          <li>Jede Kachel mit Entität = eine Lampe: <b>Name</b> = Beschriftung, <b>Entität</b> = <code>light.…</code> oder <code>switch.…</code>. Reihenfolge = Reihenfolge der Kacheln.</li>
+          <li><code>light.…</code> ist dimmbar (lange drücken); der Zustand kommt live aus Home Assistant.</li>
+          <li>Die Kachel <b>Verlichting</b> auf NOIR Thuis braucht die Funktion <i>NOIR: Verlichting (Lampen)</i>.</li>
+        </ul>
       </div></div>`;
   },
 
