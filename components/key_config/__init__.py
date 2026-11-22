@@ -42,6 +42,11 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
 
 
 async def to_code(config):
+    # Literalen naast de functie zelf (2026-11-22): main.cpp (alle YAML-headers) is zo groot geworden dat de linker
+    # een literal-pool niet meer binnen 256 KB van zijn code vindt ("l32r: literal target out of range"). Met deze
+    # vlag staat elke pool in de eigen text-sectie van de functie - dan bestaat die grens niet meer. Alleen voor de
+    # src-component (ESPHome zet build-flags op main.cpp), niet voor ESP-IDF zelf.
+    cg.add_build_flag("-mtext-section-literals")
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     cg.add(var.set_host(config["host"]))
