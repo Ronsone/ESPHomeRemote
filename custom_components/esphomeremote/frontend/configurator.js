@@ -113,6 +113,7 @@ const INT_FNS = [
   ["noir_thuis", "NOIR: Startbildschirm (Thuis)"],
   ["noir_licht", "NOIR: Verlichting (Lampen)"],
   ["noir_inst", "NOIR: UI-Einstellungen (Skin, Wallpaper)"],
+  ["noir_airco", "NOIR: Airco (Mitsubishi Heavy, Infrarot)"],
   ["mic_toggle", "Mikrofon an/aus"],
   ["clean", "Reinigungsmodus (Zurück lang beendet)"],
   ["power_off", "Remote ausschalten"],
@@ -7391,7 +7392,7 @@ const EinstTab = {
       { t: "special", label: "Audio", icon: "noir:audio", x: 3, y: 0, w: 3, h: 2, page: "media" },
       t("Verlichting", "noir:licht", 0, 2, 3, 2, { steps: [{ t: "int", fn: "noir_licht" }] }),
       t("Scènes", "noir:scenes", 3, 2, 3, 2, { steps: [{ t: "int", fn: "menu_open" }] }),
-      t("Airco", "mdi:air-conditioner", 0, 4, 6, 2, { steps: [{ t: "int", fn: "menu_open" }] }),
+      t("Airco", "mdi:air-conditioner", 0, 4, 6, 2, { steps: [{ t: "int", fn: "noir_airco" }] }),
     ];
   },
   _noirLicht() { return (this.cfg.menu?.pages || []).find((p) => p.id === "noir_licht"); },

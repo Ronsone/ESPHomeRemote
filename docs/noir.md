@@ -52,6 +52,14 @@ loslaten, 0 = uit). De echte stand komt elke 3 s uit HA (`/api/esphomeremote/sta
 Lampen komen uit de configurator (NOIR → *Lampenliste anlegen*: menupagina `noir_licht`, elke kachel met entiteit is een
 lamp, `light.*` = dimbaar) – zonder te compileren. Zonder die pagina geldt `noir_lampen` uit de YAML.
 
+## NOIR Airco (Mitsubishi Heavy Industries, infrarood)
+
+Tegel *Airco* (of functie *NOIR: Airco*) opent het airco-scherm: aan/uit, temperatuur (- / + of de pijltjestoetsen,
+OK = aan/uit), modus (Auto, Koel, Droog, Fan, Warm), fan (Auto, 1-4) en swing (uit, op/neer, links/rechts, alles).
+Elke wijziging stuurt de hele stand als een IR-frame in het protocol van de MHI-afstandsbediening RLA502A704A
+(SRK..ZS), via dezelfde IR-route als de andere knoppen. De remote kan de airco niet uitlezen: hij onthoudt de laatst
+gestuurde stand (global `noir_airco_stand`). Met `noir_airco_seite` gezet opent de tegel de menupagina zoals voorheen.
+
 ## NOIR UI-instellingen
 
 Het tandwiel op NOIR Thuis opent *UI-instellingen* (simulator `build(13)`): **Skin** (NOIR / Obsidian, SIGNATURE /

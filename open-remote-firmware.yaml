@@ -1629,6 +1629,7 @@ globals:
   - {id: noir_ui_skin,   type: int,       restore_value: true,  initial_value: "0"}    # NOIR UI-instellingen (2026-11-22): skin 0-4
   - {id: noir_ui_wall,   type: int,       restore_value: true,  initial_value: "0"}    #   wallpaper 0-2
   - {id: noir_ui_radius, type: int,       restore_value: true,  initial_value: "16"}   #   afronding 8-20 px
+  - {id: noir_airco_stand, type: int,     restore_value: true,  initial_value: "0"}    # NOIR Airco: laatst gestuurde stand (MHI-IR)
   - {id: sprache_ha_nl,  type: bool,      restore_value: true,  initial_value: "false"}   # HA ist Niederlaendisch (2026-11-20)
   - {id: sprache_ha_en,  type: bool,      restore_value: true,  initial_value: "false"}   # X-Knopf rechts (2026-11-01): Seitenkoepfe gespiegelt, Animationen andersherum
   - {id: gesten_sens,    type: int,       restore_value: true,  initial_value: "1"}

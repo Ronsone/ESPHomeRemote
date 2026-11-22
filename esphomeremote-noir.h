@@ -79,11 +79,13 @@ inline int rnd(int r) { return r >= 10 && r < LV_RADIUS_CIRCLE ? thema().radius 
 
 enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, SCENES = 104, AIRCO = 105, INSTELLINGEN = 113,
                    INST_AFRONDING = 129, INST_REMOTE = 130, DIM_GEREED = 128,
+                   AIRCO_AANUIT = 140, AIRCO_MIN = 141, AIRCO_PLUS = 142, AIRCO_FAN = 143, AIRCO_SWING = 144,
+                   AIRCO_MODUS = 150 /* 150-154 */,
                    LAMP = 400 /* 400+i: lamp i op NOIR Verlichting */,
                    TV_AANUIT = 120, TV_APP = 200 /* 200-205: app-tegels */,
                    ITEM = 1000 /* 1000+i: tegel i van de configuratorpagina "noir" */ };
 
-struct Fonts { const lv_font_t *f12{nullptr}, *f14{nullptr}, *f16{nullptr}, *ico{nullptr}, *f20{nullptr}; };
+struct Fonts { const lv_font_t *f12{nullptr}, *f14{nullptr}, *f16{nullptr}, *ico{nullptr}, *f20{nullptr}, *groot{nullptr}; };
 
 // App-tegels van het TV-scherm (simulator: apps[] in main.c). bron = tv_source voor het HA-script.
 static const char *APP_NAAM[6] = {"PS5", "Switch", "Netflix", "YouTube", "Cookie IPTV", "Plex"};
@@ -107,7 +109,7 @@ struct Beelden {
   const void *app[6]{};   // PS5, Switch, Netflix, YouTube, Cookie IPTV (nullptr = tekst), Plex
 };
 
-enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_ANZ = 4 };
+enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_AIRCO = 4, S_ANZ = 5 };
 
 struct Stand {
   lv_obj_t *laag{nullptr};                  // NOIR Thuis
@@ -125,7 +127,7 @@ struct Stand {
   std::function<void(int)> actie;   // wordt door de firmware ingevuld (tasten::noir_actie)
   const lv_font_t *toast_font{nullptr};
   // 2026-11-22: Verlichting en UI-instellingen, herbouwen na skinwissel
-  lv_obj_t *licht{nullptr}, *inst{nullptr}, *licht_body{nullptr};
+  lv_obj_t *licht{nullptr}, *inst{nullptr}, *licht_body{nullptr}, *airco{nullptr};
   lv_obj_t *home{nullptr};
   std::function<JsonArrayConst()> items;    // tegels van NOIR Thuis (configurator), voor het herbouwen
 };
@@ -719,6 +721,170 @@ inline void licht_bouwen(lv_obj_t *laag, const Fonts &f) {
   lampen_tekst();
 }
 
+// ---- NOIR Airco (2026-11-22): Mitsubishi Heavy Industries via infrarood ----------------------------------------
+// Afstandsbediening RLA502A704A (SRK..ZS). De airco krijgt bij elke wijziging de HELE stand in een frame (152 bits):
+// kop (5 bytes) | modus+aan | temperatuur | fan | 3D-auto | lamellen | staart, elke databyte als (omgekeerd, echt).
+// Bits staan hieronder in zendvolgorde (zoals de decodering van deze afstandsbediening door de community:
+// github.com/peterhinch/micropython_ir issue 46). Timing: kop 3200/1600 us, bit = 400 us aan + 1200 (1) of 430 (0) uit.
+// De remote kan de stand van de airco niet uitlezen - hij onthoudt zelf wat hij het laatst stuurde (global).
+namespace airco {
+
+struct Stand { bool aan{false}; int modus{1}; int temp{22}; int fan{0}; int swing{0}; };
+inline Stand &st_() { static Stand s; return s; }
+static const char *MODUS_NAAM[5] = {"Auto", "Koel", "Droog", "Fan", "Warm"};
+static const char *MODUS_LANG[5] = {"Automatisch", "Koelen", "Ontvochtigen", "Ventileren", "Verwarmen"};
+static const char *FAN_NAAM[5] = {"Auto", "1", "2", "3", "4"};
+static const char *SWING_NAAM[4] = {"Uit", "Op/neer", "Links/rechts", "Alles"};
+static const int TEMP_MIN = 18, TEMP_MAX = 30;
+
+inline std::function<void(const std::string &)> &zender() { static std::function<void(const std::string &)> z; return z; }   // IR-stap (JSON)
+inline std::function<void(int)> &opslaan() { static std::function<void(int)> z; return z; }
+
+inline int inpakken() {
+  const Stand &s = st_();
+  return (s.aan ? 1 : 0) | (s.modus & 7) << 1 | ((s.temp - 16) & 31) << 4 | (s.fan & 7) << 9 | (s.swing & 3) << 12 | 1 << 15;
+}
+inline void uitpakken(int v) {
+  if (!(v & (1 << 15))) return;   // nog nooit bewaard: standaard
+  Stand &s = st_();
+  s.aan = v & 1;
+  s.modus = std::min(4, (v >> 1) & 7);
+  s.temp = std::max(TEMP_MIN, std::min(TEMP_MAX, ((v >> 4) & 31) + 16));
+  s.fan = std::min(4, (v >> 9) & 7);
+  s.swing = (v >> 12) & 3;
+}
+
+// n bits van v, minst significante eerst (zoals de afstandsbediening)
+inline std::string lsb_(int v, int n) { std::string o; for (int i = 0; i < n; i++) o += (v >> i) & 1 ? '1' : '0'; return o; }
+inline std::string paar_(const std::string &b) { std::string o; for (char c : b) o += c == '1' ? '0' : '1'; return o + b; }
+
+// Frame als bitreeks (zendvolgorde)
+inline std::string bits() {
+  const Stand &s = st_();
+  std::string b = "0100101001110101110000110101100010100111";   // kop
+  b += paar_(lsb_(s.modus, 3) + (s.aan ? "1" : "0") + "0000");
+  b += paar_(lsb_(std::max(TEMP_MIN, std::min(TEMP_MAX, s.temp)) - 17, 4) + "0000");
+  b += paar_(lsb_(s.fan, 4) + "0000");
+  // lamellen: horizontaal 0 = zwenken, 3 = midden; verticaal 0 = zwenken, 6 = midden
+  const int hor = (s.swing & 2) ? 0 : 3, ver = (s.swing & 1) ? 0 : 6;
+  const std::string paneel = lsb_(hor, 4) + lsb_(ver, 4);
+  b += paar_("00000" + paneel.substr(5));   // 3D-auto uit
+  b += paar_(paneel);
+  b += "11111111000000001111111000000001";   // staart
+  return b;
+}
+// IR-stap voor tasten_konfig (zelfde sendweg als de andere IR-knoppen: zelf, dock of HA-blaster)
+inline std::string ir_json() {
+  std::string j = "{\"t\":\"ir\",\"f\":38000,\"raw\":[3200,-1600";
+  for (char c : bits()) { j += ",400,"; j += c == '1' ? "-1200" : "-430"; }
+  j += ",400]}";
+  return j;
+}
+
+inline lv_timer_t *&timer_() { static lv_timer_t *t = nullptr; return t; }
+inline void nu_sturen() {
+  if (zender()) zender()(ir_json());
+  if (opslaan()) opslaan()(inpakken());
+}
+// Na een wijziging kort wachten (vasthouden van + stuurt niet elke stap)
+inline void sturen(uint32_t ms = 600) {
+  if (timer_() != nullptr) { lv_timer_reset(timer_()); return; }
+  timer_() = lv_timer_create([](lv_timer_t *) { timer_() = nullptr; nu_sturen(); }, ms, nullptr);
+  lv_timer_set_repeat_count(timer_(), 1);
+}
+
+// Scherm-objecten
+struct Ui { lv_obj_t *temp{nullptr}, *status{nullptr}, *aan{nullptr}, *fan{nullptr}, *swing{nullptr}; lv_obj_t *modus[5]{}; };
+inline Ui &ui() { static Ui u; return u; }
+
+inline void tonen() {
+  Ui &u = ui();
+  const Stand &s = st_();
+  if (u.temp == nullptr) return;
+  char t[48];
+  snprintf(t, sizeof(t), "%d", s.temp);
+  lv_label_set_text(u.temp, t);
+  lv_obj_set_style_text_opa(u.temp, s.aan ? 255 : 110, 0);
+  if (!s.aan) snprintf(t, sizeof(t), "Uit");
+  else snprintf(t, sizeof(t), "%s \xC2\xB7 fan %s", MODUS_LANG[s.modus], FAN_NAAM[s.fan]);
+  lv_label_set_text(u.status, t);
+  lv_obj_set_style_border_color(u.aan, k(s.aan ? 0xBFC2C9 : RAND), 0);
+  lv_obj_set_style_border_opa(u.aan, s.aan ? 220 : 115, 0);
+  for (int i = 0; i < 5; i++) {
+    if (u.modus[i] == nullptr) continue;
+    const bool sel = i == s.modus;
+    lv_obj_set_style_border_color(u.modus[i], k(sel ? 0xBFC2C9 : RAND), 0);
+    lv_obj_set_style_border_opa(u.modus[i], sel ? 220 : 115, 0);
+    lv_obj_t *l = lv_obj_get_child(u.modus[i], -1);
+    if (l != nullptr) lv_obj_set_style_text_opa(l, sel ? 255 : 160, 0);
+  }
+  snprintf(t, sizeof(t), "Fan  %s", FAN_NAAM[s.fan]);
+  lv_label_set_text(lv_obj_get_child(u.fan, -1), t);
+  snprintf(t, sizeof(t), "Swing  %s", SWING_NAAM[s.swing]);
+  lv_label_set_text(lv_obj_get_child(u.swing, -1), t);
+}
+
+// Acties (AIRCO_* in Actie)
+inline void temp_stap(int d) {
+  Stand &s = st_();
+  s.temp = std::max(TEMP_MIN, std::min(TEMP_MAX, s.temp + d));
+  if (!s.aan) s.aan = true;
+  tonen();
+  sturen();
+}
+inline void aanuit() { st_().aan = !st_().aan; tonen(); sturen(150); }
+inline void modus(int m) { st_().modus = m; st_().aan = true; tonen(); sturen(150); }
+inline void fan_volgende() { st_().fan = (st_().fan + 1) % 5; tonen(); sturen(); }
+inline void swing_volgende() { st_().swing = (st_().swing + 1) % 4; tonen(); sturen(); }
+
+}  // namespace airco
+
+static const char *ICO_MIN = "\U000F0374", *ICO_PLUS = "\U000F0415";   // mdi:minus, mdi:plus
+
+inline lv_obj_t *icoon_knop_(lv_obj_t *p, int x, int y, int w, int h, int actie, const char *ico, const Fonts &f) {
+  lv_obj_t *b = knop(p, x, y, w, h, actie);
+  if (f.ico != nullptr) {
+    lv_obj_t *i = lv_label_create(b);
+    lv_label_set_text(i, ico);
+    lv_obj_set_style_text_font(i, f.ico, 0);
+    lv_obj_set_style_text_color(i, k(TEXT2), 0);
+    lv_obj_center(i);
+  }
+  return b;
+}
+inline lv_obj_t *tekst_knop_(lv_obj_t *p, int x, int y, int w, int h, int actie, const char *t, const Fonts &f) {
+  lv_obj_t *b = knop(p, x, y, w, h, actie);
+  lv_obj_t *l = label(b, t, 0, 0, w - 2, f.f12, 0xE4E7EC);
+  lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_CLIP);
+  lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_center(l);
+  return b;
+}
+
+// NOIR Airco: titel + aan/uit, status, - temperatuur +, modus (5), fan en swing (wisselknoppen)
+inline void airco_bouwen(lv_obj_t *laag, const Fonts &f) {
+  airco::Ui &u = airco::ui();
+  lv_obj_t *body = body_maken(laag, false);
+  label(body, "Airco", 0, 0, 150, f.f20 != nullptr ? f.f20 : f.f16, TEXT);
+  u.status = label(body, "", 0, 26, 160, f.f12, MUTED);
+  u.aan = icoon_knop_(body, 164, 0, 52, 34, AIRCO_AANUIT, ICO_POWER, f);
+  icoon_knop_(body, 0, 46, 58, 58, AIRCO_MIN, ICO_MIN, f);
+  icoon_knop_(body, 158, 46, 58, 58, AIRCO_PLUS, ICO_PLUS, f);
+  const lv_font_t *groot = f.groot != nullptr ? f.groot : (f.f20 != nullptr ? f.f20 : f.f16);
+  u.temp = label(body, "", 62, 46 + (58 - lv_font_get_line_height(groot)) / 2, 82, groot, TEXT);
+  lv_obj_set_style_text_align(u.temp, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_t *graad = label(body, "\xC2\xB0" "C", 140, 52, 20, f.f12, MUTED);
+  (void) graad;
+  const int bw = (216 - 4 * 4) / 5;
+  for (int i = 0; i < 5; i++)
+    u.modus[i] = tekst_knop_(body, i * (bw + 4), 114, bw, 34, AIRCO_MODUS + i, airco::MODUS_NAAM[i], f);
+  u.fan = tekst_knop_(body, 0, 158, 104, 34, AIRCO_FAN, "", f);
+  u.swing = tekst_knop_(body, 112, 158, 104, 34, AIRCO_SWING, "", f);
+  lv_obj_t *h = label(body, "Pijltjes: temperatuur  \xC2\xB7  OK: aan/uit", 0, 204, 216, f.f12, MUTED);
+  lv_obj_set_style_text_align(h, LV_TEXT_ALIGN_CENTER, 0);
+  airco::tonen();
+}
+
 // ---- NOIR UI-instellingen (simulator build(13)) ----------------------------------------------------------------
 inline std::function<void(int, int, int)> &opslaan() { static std::function<void(int, int, int)> f; return f; }   // skin, wall, radius
 inline std::function<void(uint32_t *)> &eigen_kleuren() { static std::function<void(uint32_t *)> f; return f; }   // bg,surf,text,accent
@@ -868,6 +1034,10 @@ inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl, JsonArrayC
   licht_bouwen(s.licht, f);
   onderknop(s.licht, ICO_LINKS, "Terug", 12, TERUG, f);
   onderknop(s.licht, ICO_HOME, "Thuis", 124, THUIS, f);
+  s.airco = laag_maken(home, bl);
+  airco_bouwen(s.airco, f);
+  onderknop(s.airco, ICO_LINKS, "Terug", 12, TERUG, f);
+  onderknop(s.airco, ICO_HOME, "Thuis", 124, THUIS, f);
   s.inst = laag_maken(home, bl);
   inst_bouwen(s.inst, f);
   onderknop(s.inst, ICO_LINKS, "Terug", 12, TERUG, f);
@@ -898,7 +1068,7 @@ inline void licht_herbouwen() {
 
 inline lv_obj_t *laag_van(int seite) {
   Stand &s = st();
-  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : s.laag;
+  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : seite == S_AIRCO ? s.airco : s.laag;
 }
 
 // Een NOIR-pagina tonen (de andere verbergen); de statusbalk verhuist mee
@@ -919,6 +1089,7 @@ inline void zeigen_seite(int seite) {
 }
 inline bool op_tv() { return st().zichtbaar && st().seite == S_TV; }
 inline bool op_licht() { return st().zichtbaar && st().seite == S_LICHT; }
+inline bool op_airco() { return st().zichtbaar && st().seite == S_AIRCO; }
 
 // NOIR aan (laatst getoonde pagina) of helemaal weg (gewone Aggro600-startpagina zichtbaar)
 inline void zeigen(bool an) {
@@ -945,9 +1116,10 @@ inline void alles_herbouwen() {
     keuze_dicht();
     const bool zicht = s.zichtbaar;
     const int seite = s.seite;
-    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst};
+    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst, s.airco};
     for (lv_obj_t *o : weg) if (o != nullptr) lv_obj_delete(o);   // kop hangt aan een ervan
-    s.laag = s.tv = s.licht = s.inst = nullptr;
+    s.laag = s.tv = s.licht = s.inst = s.airco = nullptr;
+    airco::ui() = airco::Ui();
     s.kop = s.klok = s.batt_txt = s.batt_fill = s.ha_dot = s.tv_status = s.thuis_body = s.licht_body = nullptr;
     for (Lamp &l : lampen()) l.lbl = nullptr;
     bouwen(s.home, s.fonts, s.beelden, s.items ? s.items() : JsonArrayConst());
@@ -1101,7 +1273,17 @@ inline void stuur(const char *knop) {
   if (noir::ha()) noir::ha()("webostv.button", {{"entity_id", entiteit()}, {"button", knop}});
 }
 // Uit on_key (na KEF): alleen als het NOIR TV-scherm zichtbaar is en de startpagina actief is
+inline bool airco_taste(int t, bool ingedrukt) {
+  if (t != 14 && t != 35 && t != 34) return false;
+  if (!ingedrukt) { halten_los(t); return true; }
+  if (t == 34) { airco::aanuit(); return true; }
+  const int d = t == 14 ? 1 : -1;
+  airco::temp_stap(d);
+  halten_start(t, [d]() { airco::temp_stap(d); });
+  return true;
+}
 inline bool taste(int t, bool ingedrukt, bool op_home) {
+  if (op_home && op_airco()) return airco_taste(t, ingedrukt);   // NOIR Airco: pijlen = temperatuur, OK = aan/uit
   if (entiteit().empty() || !noir::ha() || !op_home || !op_tv()) return false;
   const char *knop = knop_van(t);
   if (knop == nullptr) return false;

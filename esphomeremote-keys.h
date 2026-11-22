@@ -699,6 +699,7 @@ inline void intern(const char *fn, int arg, const Ctx &c) {
   else if (!strcmp(fn, "noir_thuis")) noir_actie(noir::THUIS);    // NOIR Thuis
   else if (!strcmp(fn, "noir_licht")) noir_actie(noir::LICHT);    // NOIR Verlichting (2026-11-22)
   else if (!strcmp(fn, "noir_inst")) noir_actie(noir::INSTELLINGEN);   // NOIR UI-instellingen
+  else if (!strcmp(fn, "noir_airco")) noir_actie(noir::AIRCO);    // NOIR Airco (MHI via IR)
   else if (!strcmp(fn, "skin")) skin_waehlen(arg);
   else if (!strcmp(fn, "mic_toggle")) toggle_mic->execute();
   else if (!strcmp(fn, "clean")) clean_run->execute();
@@ -1086,6 +1087,7 @@ inline void noir_item_actie(int index) {
 }
 inline void noir_actie(int a) {
   if (a >= noir::ITEM) { noir_item_actie(a - noir::ITEM); return; }
+  if (a >= noir::AIRCO_MODUS && a < noir::AIRCO_MODUS + 5) { noir::airco::modus(a - noir::AIRCO_MODUS); return; }
   if (a >= noir::LAMP && a < noir::LAMP + 12) { noir::lamp_schakelen(a - noir::LAMP, millis()); return; }
   if (a >= noir::TV_APP && a < noir::TV_APP + 6) {   // app/bron op de tv (script uit je dashboard)
     const int i = a - noir::TV_APP;
@@ -1118,7 +1120,15 @@ inline void noir_actie(int a) {
       else noir_menupagina(noir_licht_seite());
       break;
     case noir::SCENES: noir_menupagina(noir_scenes_seite()); break;
-    case noir::AIRCO: noir_menupagina(noir_airco_seite()); break;   // menupagina met je airco-knoppen (IR/HA)
+    case noir::AIRCO:   // NOIR Airco-scherm (MHI via IR); met noir_airco_seite de menupagina zoals voorheen
+      if (noir_airco_seite().empty()) noir::zeigen_seite(noir::S_AIRCO);
+      else noir_menupagina(noir_airco_seite());
+      break;
+    case noir::AIRCO_AANUIT: noir::airco::aanuit(); break;
+    case noir::AIRCO_MIN: noir::airco::temp_stap(-1); break;
+    case noir::AIRCO_PLUS: noir::airco::temp_stap(1); break;
+    case noir::AIRCO_FAN: noir::airco::fan_volgende(); break;
+    case noir::AIRCO_SWING: noir::airco::swing_volgende(); break;
     case noir::INSTELLINGEN: noir::zeigen_seite(noir::S_INST); break;   // NOIR UI-instellingen (simulator 13)
     case noir::INST_REMOTE: open_menu_top->execute(); break;              // het volledige Aggro600-menu
     case noir::INST_AFRONDING: {                                          // 8 -> 20 px in stappen van 2
@@ -1165,6 +1175,10 @@ inline void noir_starten(bool aan, const char *kef, const char *licht, const cha
   noir::opslaan() = [](int sk, int wa, int ra) { noir_ui_skin->value() = sk; noir_ui_wall->value() = wa; noir_ui_radius->value() = ra; };
   noir::thema_laden(noir_ui_skin->value(), noir_ui_wall->value(), noir_ui_radius->value());
   noir::st().items = []() { return noir_items(); };
+  // NOIR Airco (2026-11-22): IR-frame via de gewone IR-stap (zelf/dock/HA-blaster), stand bewaard in een global
+  noir::airco::uitpakken(noir_airco_stand->value());
+  noir::airco::zender() = [](const std::string &j) { tk_cfg->ir_test(j); };
+  noir::airco::opslaan() = [](int v) { noir_airco_stand->value() = v; };
   if (aan) {
     noir::Beelden bl;
     bl.wall = noir_wall->get_lv_image_dsc();
@@ -1179,7 +1193,7 @@ inline void noir_starten(bool aan, const char *kef, const char *licht, const cha
     bl.app[4] = nullptr;   // Cookie IPTV: tekst
     bl.app[5] = noir_app_plex->get_lv_image_dsc();
     noir::bouwen(page_home->obj,
-                 {noir_i12->get_lv_font(), noir_i14->get_lv_font(), noir_i16->get_lv_font(), mdi_menu->get_lv_font(), noir_i20->get_lv_font()},
+                 {noir_i12->get_lv_font(), noir_i14->get_lv_font(), noir_i16->get_lv_font(), mdi_menu->get_lv_font(), noir_i20->get_lv_font(), a48->get_lv_font()},
                  bl, noir_items());
     if (cur_page->value() == 0) noir::bij_home();
   }

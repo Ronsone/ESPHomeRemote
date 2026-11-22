@@ -3719,5 +3719,6 @@
  "Noch keine Liste – es gilt <code>noir_lampen</code> aus der YAML.": "No list yet – <code>noir_lampen</code> from the YAML applies.",
  "Lampen bearbeiten": "Edit lamps",
  "Lampenliste anlegen": "Create lamp list",
- "Liste löschen": "Delete list"
+ "Liste löschen": "Delete list",
+ "NOIR: Airco (Mitsubishi Heavy, Infrarot)": "NOIR: Air conditioner (Mitsubishi Heavy, infrared)"
 }
