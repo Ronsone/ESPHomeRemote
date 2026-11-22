@@ -115,6 +115,8 @@ const INT_FNS = [
   ["noir_inst", "NOIR: UI-Einstellungen (Skin, Wallpaper)"],
   ["noir_airco", "NOIR: Airco (Mitsubishi Heavy, Infrarot)"],
   ["noir_test", "NOIR: Tastentest (Steuerkreuz/OK)"],
+  ["noir_scenes", "NOIR: Szenen-Bildschirm"],
+  ["noir_alles_uit", "NOIR: Alles aus (Lampen, TV, KEF, Klima)"],
   ["mic_toggle", "Mikrofon an/aus"],
   ["clean", "Reinigungsmodus (Zurück lang beendet)"],
   ["power_off", "Remote ausschalten"],
@@ -7399,11 +7401,12 @@ const EinstTab = {
       t("TV", "noir:tv", 0, 0, 3, 2, { steps: [{ t: "int", fn: "noir_tv" }] }),
       { t: "special", label: "Audio", icon: "noir:audio", x: 3, y: 0, w: 3, h: 2, page: "media" },
       t("Verlichting", "noir:licht", 0, 2, 3, 2, { steps: [{ t: "int", fn: "noir_licht" }] }),
-      t("Scènes", "noir:scenes", 3, 2, 3, 2, { steps: [{ t: "int", fn: "menu_open" }] }),
+      t("Scènes", "noir:scenes", 3, 2, 3, 2, { steps: [{ t: "int", fn: "noir_scenes" }] }),
       t("Airco", "mdi:air-conditioner", 0, 4, 6, 2, { steps: [{ t: "int", fn: "noir_airco" }] }),
     ];
   },
   _noirLicht() { return (this.cfg.menu?.pages || []).find((p) => p.id === "noir_licht"); },
+  _noirScenes() { return (this.cfg.menu?.pages || []).find((p) => p.id === "noir_scenes"); },
   _noirClick(a, t) {
     const m = this.menu;
     if (a === "noir_licht") {   // NOIR Verlichting (2026-11-22): Lampen = Eintraege der Menueseite "noir_licht"
@@ -7411,6 +7414,23 @@ const EinstTab = {
       this._seiteMerken?.("menu");
       this.s.mode = "menu"; this.s.mpage = "noir_licht"; this.s.mitem = null;
       return;
+    }
+    if (a === "noir_scenes") {   // NOIR Scènes (2026-11-22): Szenen = Eintraege der Menueseite "noir_scenes"
+      if (!this._noirScenes()) {
+        m.pages.push({ id: "noir_scenes", title: "NOIR Scènes", items: [
+          { t: "action", label: "Film", icon: "mdi:movie-open", x: 0, y: 0, w: 3, h: 2, steps: [] },
+          { t: "action", label: "Diner", icon: "mdi:silverware-fork-knife", x: 3, y: 0, w: 3, h: 2, steps: [] },
+        ] });
+        this._touch();
+      }
+      this._seiteMerken?.("menu");
+      this.s.mode = "menu"; this.s.mpage = "noir_scenes"; this.s.mitem = null;
+      return;
+    }
+    if (a === "noir_scenes_weg") {
+      if (!confirm("Eigene Szenen löschen? NOIR Scènes zeigt dann nur noch „Alles uit“.")) return;
+      m.pages = m.pages.filter((p) => p.id !== "noir_scenes");
+      this._touch(); return;
     }
     if (a === "noir_licht_weg") {
       if (!confirm("Lampenliste löschen? NOIR Verlichting nutzt dann wieder noir_lampen aus der YAML.")) return;
@@ -7474,6 +7494,17 @@ const EinstTab = {
           <li><b>Symbole</b>: alle aus der Symbolauswahl des Menüs; dazu <code>noir:tv</code>, <code>noir:audio</code>, <code>noir:licht</code>, <code>noir:scenes</code> für die NOIR-Linienzeichen.</li>
         </ul>
         <small class="note">Die Seite „noir“ erscheint auch in der Liste des Menü-Editors; im normalen Menü der Remote wird sie nur angezeigt, wenn du irgendwo auf sie verlinkst.</small>
+        <h3><ha-icon icon="mdi:layers-outline"></ha-icon> NOIR Scènes</h3>
+        <p>Szenen für den Bildschirm Scènes – <b>ohne neue Firmware</b>. „Alles uit“ (Lampen, TV, KEF, Klima aus) ist immer dabei. ${this._noirScenes() ? `${(this._noirScenes().items || []).filter((i) => i.label).length} eigene Szene(n).` : "Noch keine eigenen Szenen."}</p>
+        <div class="inl">
+          <button class="btn" data-a="noir_scenes"><ha-icon icon="mdi:pencil"></ha-icon>${this._noirScenes() ? "Szenen bearbeiten" : "Szenen anlegen"}</button>
+          ${this._noirScenes() ? `<button class="btn ghost" data-a="noir_scenes_weg"><ha-icon icon="mdi:delete-outline"></ha-icon>Szenen löschen</button>` : ""}
+        </div>
+        <ul class="noirhilfe">
+          <li>Jede Kachel = eine Szene: <b>Name</b>, <b>Symbol</b> und <b>Schritte</b> – Home Assistant (z. B. <code>light.turn_on</code> mit Helligkeit), Infrarot, Warten, Funktionen der Remote (z. B. <i>NOIR: Alles aus</i>).</li>
+          <li>Oder ohne Schritte nur eine <b>Entität</b>: <code>scene.…</code> oder <code>script.…</code> aus Home Assistant wird gestartet.</li>
+          <li>Die Kachel <b>Scènes</b> auf NOIR Thuis braucht die Funktion <i>NOIR: Szenen-Bildschirm</i>.</li>
+        </ul>
         <h3><ha-icon icon="mdi:air-conditioner"></ha-icon> NOIR Airco (Mitsubishi Heavy, IR)</h3>
         <p>Feinabstimmung des Infrarot-Signals – <b>ohne neue Firmware</b>. Leer = Standard (getestet mit RLA502A704A).</p>
         <div class="noirairco">${[["hi", "HI POWER Code", 9, 0, 15], ["eco", "ECO Code", 6, 0, 15], ["tmin", "Temperatur min", 18, 16, 31], ["tmax", "Temperatur max", 30, 16, 31],

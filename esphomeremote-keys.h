@@ -701,6 +701,8 @@ inline void intern(const char *fn, int arg, const Ctx &c) {
   else if (!strcmp(fn, "noir_inst")) noir_actie(noir::INSTELLINGEN);   // NOIR UI-instellingen
   else if (!strcmp(fn, "noir_airco")) noir_actie(noir::AIRCO);    // NOIR Airco (MHI via IR)
   else if (!strcmp(fn, "noir_test")) noir_actie(noir::KNOPTEST);  // NOIR Knoppentest
+  else if (!strcmp(fn, "noir_scenes")) noir_actie(noir::SCENES);  // NOIR Scènes
+  else if (!strcmp(fn, "noir_alles_uit")) noir_alles_uit();       // NOIR: alles uit (lampen, tv, KEF, airco)
   else if (!strcmp(fn, "skin")) skin_waehlen(arg);
   else if (!strcmp(fn, "mic_toggle")) toggle_mic->execute();
   else if (!strcmp(fn, "clean")) clean_run->execute();
@@ -1065,10 +1067,35 @@ inline void noir_lampen_laden() {
 }
 // Tik op tegel i: zoals in het menu - page opent een menupagina, special een ingebouwde pagina, verder de stappen
 // van het item, of (zonder stappen) aan/uit van de entiteit
+inline void noir_item_uitvoeren(JsonObjectConst it);
 inline void noir_item_actie(int index) {
   JsonArrayConst items = noir_items();
   if (items.isNull() || index < 0 || index >= (int) items.size()) return;
+  noir_item_uitvoeren(items[index]);
+}
+// NOIR Scènes (2026-11-22): tegel i van de configuratorpagina "noir_scenes"
+inline void noir_scene(int index) {
+  JsonArrayConst items = noir_pagina_items("noir_scenes");
+  if (items.isNull() || index < 0 || index >= (int) items.size()) return;
   JsonObjectConst it = items[index];
+  noir_item_uitvoeren(it);
+  const char *naam = it["label"] | "";
+  if (*naam) noir::toast(naam);
+}
+// Ingebouwde scène "Alles uit": lampen, tv, KEF en airco
+inline void noir_alles_uit() {
+  for (const auto &l : noir::lampen()) {
+    const char *svc = l.entiteit.rfind("light.", 0) == 0 ? "light.turn_off" : l.entiteit.rfind("switch.", 0) == 0 ? "switch.turn_off" : "homeassistant.turn_off";
+    tk_cfg->ha_aufruf(svc, {{"entity_id", l.entiteit}});
+  }
+  if (!noir::tv::entiteit().empty()) tk_cfg->ha_aufruf("media_player.turn_off", {{"entity_id", noir::tv::entiteit()}});
+  if (!noir::kef::entiteit().empty()) tk_cfg->ha_aufruf("media_player.turn_off", {{"entity_id", noir::kef::entiteit()}});
+  if (noir::airco::st_().aan) noir::airco::aanuit();   // stuurt het uit-signaal (IR)
+  for (auto &l : noir::lampen()) if (!l.state.empty()) l.state = "off";
+  noir::lampen_tekst();
+  noir::toast("Alles uit");
+}
+inline void noir_item_uitvoeren(JsonObjectConst it) {
   const std::string t = it["t"] | "";
   JsonArrayConst steps = it["steps"];
   const bool eigen = !steps.isNull() && steps.size() > 0;
@@ -1083,10 +1110,13 @@ inline void noir_item_actie(int index) {
   }
   if (eigen) { tk_cfg->schritte(steps); return; }
   if (e.empty()) return;
+  if (e.rfind("scene.", 0) == 0) { tk_cfg->ha_aufruf("scene.turn_on", {{"entity_id", e}}); return; }     // HA-scène
+  if (e.rfind("script.", 0) == 0) { tk_cfg->ha_aufruf("script.turn_on", {{"entity_id", e}}); return; }   // HA-script
   const char *svc = t == "light" ? "light.toggle" : t == "cover" ? "cover.toggle" : "homeassistant.toggle";
   tk_cfg->ha_aufruf(svc, {{"entity_id", e}});
 }
 inline void noir_actie(int a) {
+  if (a >= noir::SCENE && a < noir::SCENE + 40) { noir_scene(a - noir::SCENE); return; }
   if (a >= noir::ITEM) { noir_item_actie(a - noir::ITEM); return; }
   if (a >= noir::AIRCO_MODUS && a < noir::AIRCO_MODUS + 5) { noir::airco::modus(a - noir::AIRCO_MODUS); return; }
   if (a >= noir::LAMP && a < noir::LAMP + 12) { noir::lamp_schakelen(a - noir::LAMP, millis()); return; }
@@ -1120,7 +1150,11 @@ inline void noir_actie(int a) {
       if (!noir::lampen().empty() || noir_licht_seite().empty()) noir::zeigen_seite(noir::S_LICHT);
       else noir_menupagina(noir_licht_seite());
       break;
-    case noir::SCENES: noir_menupagina(noir_scenes_seite()); break;
+    case noir::SCENES:   // NOIR Scènes-scherm; met noir_scenes_seite de menupagina zoals voorheen
+      if (noir_scenes_seite().empty()) noir::zeigen_seite(noir::S_SCENES);
+      else noir_menupagina(noir_scenes_seite());
+      break;
+    case noir::SCENE_ALLES_UIT: noir_alles_uit(); break;
     case noir::AIRCO:   // NOIR Airco-scherm (MHI via IR); met noir_airco_seite de menupagina zoals voorheen
       if (noir_airco_seite().empty()) noir::zeigen_seite(noir::S_AIRCO);
       else noir_menupagina(noir_airco_seite());
@@ -1185,6 +1219,7 @@ inline void noir_starten(bool aan, const char *kef, const char *licht, const cha
   noir::opslaan() = [](int sk, int wa, int ra) { noir_ui_skin->value() = sk; noir_ui_wall->value() = wa; noir_ui_radius->value() = ra; };
   noir::thema_laden(noir_ui_skin->value(), noir_ui_wall->value(), noir_ui_radius->value());
   noir::st().items = []() { return noir_items(); };
+  noir::st().scenes_items = []() { return noir_pagina_items("noir_scenes"); };   // NOIR Scènes
   // NOIR Airco (2026-11-22): IR-frame via de gewone IR-stap (zelf/dock/HA-blaster), stand bewaard in een global
   noir::airco::inst_laden(tk_cfg->wurzel()["noir_airco"]);   // instellingen uit de configurator
   noir::airco::uitpakken(noir_airco_stand->value());
@@ -1328,6 +1363,7 @@ inline void einrichten() {
     noir::airco::inst_laden(tk_cfg->wurzel()["noir_airco"]);   // NOIR Airco: instellingen uit de configurator
     noir::airco::tonen();
     noir::licht_herbouwen();
+    noir::scenes_herbouwen();               // NOIR Scènes: pagina "noir_scenes" uit de configurator
     akzent_anwenden->execute();   // vor dem Neuaufbau: neue Teile holen akzent::farbe()
     apply_activity->execute();
     apply_home_layout->execute();

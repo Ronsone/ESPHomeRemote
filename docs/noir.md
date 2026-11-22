@@ -60,6 +60,14 @@ Elke wijziging stuurt de hele stand als een IR-frame in het protocol van de MHI-
 (SRK..ZS), via dezelfde IR-route als de andere knoppen. De remote kan de airco niet uitlezen: hij onthoudt de laatst
 gestuurde stand (global `noir_airco_stand`). Met `noir_airco_seite` gezet opent de tegel de menupagina zoals voorheen.
 
+## NOIR Scènes
+
+Tegel *Scènes* (functie *NOIR: Szenen-Bildschirm*) opent het scènes-scherm. Vooraan staat altijd **Alles uit**: alle
+lampen uit de lampenlijst, de tv, de KEF en de airco (IR) uit - ook als functie *NOIR: Alles aus* voor knoppen of
+activiteiten. Eigen scènes maak je zonder te compileren in de configurator (NOIR -> *Szenen anlegen*: menupagina
+`noir_scenes`); elke kachel voert zijn stappen uit (HA, IR, wachten, functies van de remote) of start zonder stappen
+een `scene.`- of `script.`-entiteit uit HA.
+
 ## NOIR UI-instellingen
 
 Het tandwiel op NOIR Thuis opent *UI-instellingen* (simulator `build(13)`): **Skin** (NOIR / Obsidian, SIGNATURE /

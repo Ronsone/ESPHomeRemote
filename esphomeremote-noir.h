@@ -79,7 +79,8 @@ inline int rnd(int r) { return r >= 10 && r < LV_RADIUS_CIRCLE ? thema().radius 
 
 enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, SCENES = 104, AIRCO = 105, INSTELLINGEN = 113,
                    INST_AFRONDING = 129, INST_REMOTE = 130, DIM_GEREED = 128,
-                   AIRCO_AANUIT = 140, AIRCO_MIN = 141, AIRCO_PLUS = 142, AIRCO_FAN = 143, AIRCO_SWING = 144, AIRCO_HI = 145, AIRCO_ECO = 146, KNOPTEST = 160, TEST_RESET = 161,
+                   AIRCO_AANUIT = 140, AIRCO_MIN = 141, AIRCO_PLUS = 142, AIRCO_FAN = 143, AIRCO_SWING = 144, AIRCO_HI = 145, AIRCO_ECO = 146, KNOPTEST = 160, TEST_RESET = 161, SCENE_ALLES_UIT = 170,
+                   SCENE = 3000 /* 3000+i: scène i van de configuratorpagina "noir_scenes" */,
                    AIRCO_MODUS = 150 /* 150-154 */,
                    LAMP = 400 /* 400+i: lamp i op NOIR Verlichting */,
                    TV_AANUIT = 120, TV_APP = 200 /* 200-205: app-tegels */,
@@ -109,7 +110,7 @@ struct Beelden {
   const void *app[6]{};   // PS5, Switch, Netflix, YouTube, Cookie IPTV (nullptr = tekst), Plex
 };
 
-enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_AIRCO = 4, S_TEST = 5, S_ANZ = 6 };
+enum Seite : int { S_THUIS = 0, S_TV = 1, S_LICHT = 2, S_INST = 3, S_AIRCO = 4, S_TEST = 5, S_SCENES = 6, S_ANZ = 7 };
 
 struct Stand {
   lv_obj_t *laag{nullptr};                  // NOIR Thuis
@@ -127,7 +128,8 @@ struct Stand {
   std::function<void(int)> actie;   // wordt door de firmware ingevuld (tasten::noir_actie)
   const lv_font_t *toast_font{nullptr};
   // 2026-11-22: Verlichting en UI-instellingen, herbouwen na skinwissel
-  lv_obj_t *licht{nullptr}, *inst{nullptr}, *licht_body{nullptr}, *airco{nullptr}, *test{nullptr};
+  lv_obj_t *licht{nullptr}, *inst{nullptr}, *licht_body{nullptr}, *airco{nullptr}, *test{nullptr}, *scenes{nullptr}, *scenes_body{nullptr};
+  std::function<JsonArrayConst()> scenes_items;   // configuratorpagina "noir_scenes"
   lv_obj_t *home{nullptr};
   std::function<JsonArrayConst()> items;    // tegels van NOIR Thuis (configurator), voor het herbouwen
 };
@@ -1063,6 +1065,38 @@ inline void test_bouwen(lv_obj_t *laag, const Fonts &f) {
   knoptest::tonen();
 }
 
+// ---- NOIR Scènes (2026-11-22) ---------------------------------------------------------------------------------
+// Tegels = items van de configuratorpagina "noir_scenes" (naam, icoon, stappen: HA, IR, wachten ...) - zonder
+// compileren aan te passen. Vooraan altijd de ingebouwde scène "Alles uit" (lampen, tv, KEF en airco uit).
+static const char *ICO_UIT = "\U000F0425";   // mdi:power
+inline void scenes_bouwen(lv_obj_t *laag, const Fonts &f, const Beelden &bl, JsonArrayConst items) {
+  Stand &s = st();
+  lv_obj_t *body = s.scenes_body = body_maken(laag, true);
+  label(body, "Sc\xC3\xA8nes", 0, 0, 216, f.f20 != nullptr ? f.f20 : f.f16, TEXT);
+  int n = 0;
+  auto plek = [&](int i, int &x, int &y) { x = (i % 2) * 112; y = 36 + (i / 2) * 64; };
+  int x, y;
+  plek(n++, x, y);
+  tegel(body, "Alles uit", x, y, SCENE_ALLES_UIT, nullptr, f, 104, 56, ICO_UIT);
+  int i = 0;
+  for (JsonObjectConst it : items) {
+    if (i >= 30) break;
+    const char *naam = it["label"] | "";
+    if (!*naam && (it["t"] | std::string()) == "text") { i++; continue; }
+    const char *icon = it["icon"] | "";
+    const void *beeld = noir_beeld(icon, bl);
+    const std::string teken = beeld == nullptr ? mdi_teken(icon) : std::string();
+    plek(n++, x, y);
+    tegel(body, naam, x, y, SCENE + i, beeld, f, 104, 56, teken.empty() ? nullptr : teken.c_str());
+    i++;
+  }
+  if (items.isNull() || items.size() == 0) {
+    plek(n, x, y);
+    lv_obj_t *h = label(body, "Eigen sc\xC3\xA8nes: configurator \xE2\x86\x92 NOIR \xE2\x86\x92 Sc\xC3\xA8nes.", 0, y + 8, 216, f.f12, MUTED);
+    lv_label_set_long_mode(h, LV_LABEL_LONG_MODE_WRAP);
+  }
+}
+
 // ---- NOIR UI-instellingen (simulator build(13)) ----------------------------------------------------------------
 inline std::function<void(int, int, int)> &opslaan() { static std::function<void(int, int, int)> f; return f; }   // skin, wall, radius
 inline std::function<void(uint32_t *)> &eigen_kleuren() { static std::function<void(uint32_t *)> f; return f; }   // bg,surf,text,accent
@@ -1217,6 +1251,10 @@ inline void bouwen(lv_obj_t *home, const Fonts &f, const Beelden &bl, JsonArrayC
   airco_bouwen(s.airco, f);
   onderknop(s.airco, ICO_LINKS, "Terug", 12, TERUG, f);
   onderknop(s.airco, ICO_HOME, "Thuis", 124, THUIS, f);
+  s.scenes = laag_maken(home, bl);
+  scenes_bouwen(s.scenes, f, bl, s.scenes_items ? s.scenes_items() : JsonArrayConst());
+  onderknop(s.scenes, ICO_LINKS, "Terug", 12, TERUG, f);
+  onderknop(s.scenes, ICO_HOME, "Thuis", 124, THUIS, f);
   s.test = laag_maken(home, bl);
   test_bouwen(s.test, f);
   onderknop(s.test, ICO_LINKS, "Terug", 12, TERUG, f);
@@ -1242,6 +1280,11 @@ inline void thuis_herbouwen(JsonArrayConst items) {
   Stand &s = st();
   body_vervangen_(s.laag, s.thuis_body, [&]() { thuis_bouwen(s.laag, s.fonts, s.beelden, items); });
 }
+// Nieuwe scènes (configurator): NOIR Scènes opnieuw
+inline void scenes_herbouwen() {
+  Stand &s = st();
+  body_vervangen_(s.scenes, s.scenes_body, [&]() { scenes_bouwen(s.scenes, s.fonts, s.beelden, s.scenes_items ? s.scenes_items() : JsonArrayConst()); });
+}
 // Nieuwe lampenlijst (configurator): NOIR Verlichting opnieuw
 inline void licht_herbouwen() {
   Stand &s = st();
@@ -1251,7 +1294,7 @@ inline void licht_herbouwen() {
 
 inline lv_obj_t *laag_van(int seite) {
   Stand &s = st();
-  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : seite == S_AIRCO ? s.airco : seite == S_TEST ? s.test : s.laag;
+  return seite == S_TV ? s.tv : seite == S_LICHT ? s.licht : seite == S_INST ? s.inst : seite == S_AIRCO ? s.airco : seite == S_TEST ? s.test : seite == S_SCENES ? s.scenes : s.laag;
 }
 
 // Een NOIR-pagina tonen (de andere verbergen); de statusbalk verhuist mee
@@ -1300,9 +1343,9 @@ inline void alles_herbouwen() {
     keuze_dicht();
     const bool zicht = s.zichtbaar;
     const int seite = s.seite;
-    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst, s.airco, s.test};
+    lv_obj_t *weg[] = {s.laag, s.tv, s.licht, s.inst, s.airco, s.test, s.scenes};
     for (lv_obj_t *o : weg) if (o != nullptr) lv_obj_delete(o);   // kop hangt aan een ervan
-    s.laag = s.tv = s.licht = s.inst = s.airco = s.test = nullptr;
+    s.laag = s.tv = s.licht = s.inst = s.airco = s.test = s.scenes = s.scenes_body = nullptr;
     for (auto &t : knoptest::st_().tegel) t = nullptr;
     knoptest::st_().info = nullptr;
     airco::ui() = airco::Ui();

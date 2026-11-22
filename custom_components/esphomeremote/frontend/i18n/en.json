@@ -3731,5 +3731,13 @@
  "Horizontal bei Swing": "Horizontal with swing",
  "Vertikal bei Swing": "Vertical with swing",
  "Startimpuls (µs)": "Start pulse (µs)",
- "NOIR: Tastentest (Steuerkreuz/OK)": "NOIR: Key test (D-pad/OK)"
+ "NOIR: Tastentest (Steuerkreuz/OK)": "NOIR: Key test (D-pad/OK)",
+ "NOIR: Szenen-Bildschirm": "NOIR: Scenes screen",
+ "NOIR: Alles aus (Lampen, TV, KEF, Klima)": "NOIR: All off (lights, TV, KEF, air con)",
+ "Eigene Szenen löschen? NOIR Scènes zeigt dann nur noch „Alles uit“.": "Delete your scenes? NOIR Scènes then only shows “Alles uit”.",
+ "Szenen bearbeiten": "Edit scenes",
+ "Szenen anlegen": "Create scenes",
+ "Szenen löschen": "Delete scenes",
+ "eigene Szene(n).": "own scene(s).",
+ "Noch keine eigenen Szenen.": "No own scenes yet."
 }
