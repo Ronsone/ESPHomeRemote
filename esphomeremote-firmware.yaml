@@ -2146,7 +2146,8 @@ touchscreen:
             for (auto t : touches) {
               lv_point_t p = {(int32_t) t.x_org, (int32_t) t.y_org};
               for (lv_obj_t *o = sc0 ? lv_indev_search_obj(sc0, &p) : nullptr; o != nullptr && !scrollt; o = lv_obj_get_parent(o))
-                scrollt = lv_obj_has_flag(o, LV_OBJ_FLAG_SCROLLABLE) &&
+                scrollt = lv_obj_has_flag(o, LV_OBJ_FLAG_USER_3) ||   // NOIR-letterwiel: slepen is de bediening
+                          lv_obj_has_flag(o, LV_OBJ_FLAG_SCROLLABLE) &&
                           (lv_obj_get_scroll_top(o) > 0 || lv_obj_get_scroll_bottom(o) > 0 ||
                            lv_obj_get_scroll_left(o) > 0 || lv_obj_get_scroll_right(o) > 0);
             }
@@ -2176,7 +2177,7 @@ touchscreen:
             lv_obj_t *o = lv_indev_search_obj(lv_layer_top(), &p0);
             if (o == nullptr) o = lv_indev_search_obj(lv_screen_active(), &p0);
             for (lv_obj_t *q = o; q != nullptr && wisch; q = lv_obj_get_parent(q))
-              if (lv_obj_check_type(q, &lv_slider_class) || lv_obj_check_type(q, &lv_bar_class)) wisch = false;
+              if (lv_obj_check_type(q, &lv_slider_class) || lv_obj_check_type(q, &lv_bar_class) || lv_obj_has_flag(q, LV_OBJ_FLAG_USER_3)) wisch = false;
           }
           if (id(stopp_tipp) || wisch) {
             for (lv_indev_t *in = lv_indev_get_next(nullptr); in != nullptr; in = lv_indev_get_next(in))

@@ -113,7 +113,7 @@ inline void ziehen_pruefen(int dx, int dy, bool ausgenommen, int x0, int y0) {
   lv_obj_t *o = lv_indev_search_obj(lv_layer_top(), &p0);
   if (o == nullptr) o = lv_indev_search_obj(lv_screen_active(), &p0);
   for (lv_obj_t *t = o; t != nullptr; t = lv_obj_get_parent(t))
-    if (lv_obj_check_type(t, &lv_slider_class) || lv_obj_check_type(t, &lv_bar_class)) return;   // Regler: ziehen erlaubt
+    if (lv_obj_check_type(t, &lv_slider_class) || lv_obj_check_type(t, &lv_bar_class) || lv_obj_has_flag(t, LV_OBJ_FLAG_USER_3)) return;   // Regler / NOIR-letterwiel (USER_3): ziehen erlaubt
   // Kann etwas unter dem Finger in Zugrichtung scrollen, gehoert die Geste LVGL - auch wenn es
   // noch nicht damit angefangen hat. on_update kommt oft VOR LVGLs eigener Auswertung; bei einem
   // schnellen Wisch war der Finger schon 15 px weit, bevor LVGL "scrollt" meldete, und der Abbruch

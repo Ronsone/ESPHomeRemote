@@ -2474,7 +2474,7 @@ inline void zoek_bouwen(lv_obj_t *laag, const Fonts &f) {
     lv_obj_set_style_border_color(w, k(RAND), 0);
     lv_obj_set_style_border_opa(w, 115, 0);
     lv_obj_remove_flag(w, (lv_obj_flag_t) (LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE | LV_OBJ_FLAG_SCROLL_CHAIN));
-    lv_obj_add_flag(w, (lv_obj_flag_t) (LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_PRESS_LOCK));
+    lv_obj_add_flag(w, (lv_obj_flag_t) (LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_PRESS_LOCK | LV_OBJ_FLAG_USER_3));   // USER_3: de firmware breekt slepen hier niet af
     lv_obj_t *band = detail(w, 4, (3 * st2 - 2) / 2 - 15, 76, 30, 0xBFC2C9, 38, 8);
     (void) band;
     WielUi &wu = wiel_ui();
@@ -2512,7 +2512,11 @@ inline void zoek_bouwen(lv_obj_t *laag, const Fonts &f) {
           audio::wiel_stap(zone); herhaald = lv_tick_get(); gedraaid = 100;   // vasthouden: doordraaien
         }
       } else if (c == LV_EVENT_RELEASED && gedraaid == 0) {
-        if (zone == 0) audio::wiel_zet(); else audio::wiel_stap(zone);
+        // De touchchip meldt bij een snelle veeg soms alleen neer + op: dan het verschil hier verwerken
+        const int stappen = (pt.y - start_y) / 16;
+        if (stappen != 0) audio::wiel_stap(-stappen);
+        else if (zone == 0) audio::wiel_zet();
+        else audio::wiel_stap(zone);
       }
     }, LV_EVENT_ALL, nullptr);
     audio::wiel_tonen_();
