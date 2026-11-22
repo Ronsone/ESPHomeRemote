@@ -1228,7 +1228,7 @@ inline void beeld_vullen_(Beeld &b, uint8_t *px, int w, int h) {
 }
 inline void tonen_(std::vector<Wacht> &lijst, int id, char soort, const lv_image_dsc_t *dsc) {
   for (auto &w : lijst)
-    if (w.id == id && w.soort == soort && w.img != nullptr) { lv_image_set_src(w.img, nullptr); lv_image_set_src(w.img, dsc); lv_obj_remove_flag(w.img, LV_OBJ_FLAG_HIDDEN); }
+    if (w.id == id && w.soort == soort && w.img != nullptr) { lv_image_set_src(w.img, (const void *) nullptr); lv_image_set_src(w.img, dsc); lv_obj_remove_flag(w.img, LV_OBJ_FLAG_HIDDEN); }
 }
 inline void poster_vragen(int id) {
   Data &x = d();
@@ -1597,7 +1597,7 @@ inline void cover_zetten_(lv_obj_t *im, int sleutel, int maat) {
   if (im == nullptr) return;
   const lv_image_dsc_t *c = cover_van(sleutel);
   if (c == nullptr) { lv_obj_add_flag(im, LV_OBJ_FLAG_HIDDEN); return; }
-  lv_image_set_src(im, nullptr);   // zelfde dsc met nieuwe pixels: opnieuw laten lezen
+  lv_image_set_src(im, (const void *) nullptr);   // zelfde dsc met nieuwe pixels: opnieuw laten lezen
   lv_image_set_src(im, c);
   if (c->header.w != maat) lv_image_set_scale(im, 256 * maat / c->header.w);
   lv_obj_remove_flag(im, LV_OBJ_FLAG_HIDDEN);
@@ -1611,7 +1611,7 @@ inline void covers_weg_(int lo, int hi) {
   Data &x = d();
   if (x.cover >= lo && x.cover < hi) { x.cover = x.covers.count(COVER_NU) ? COVER_NU : 0; }
   for (auto &w : x.wacht)
-    if (w.second >= lo && w.second < hi && lv_obj_is_valid(w.first)) { lv_image_set_src(w.first, nullptr); lv_obj_add_flag(w.first, LV_OBJ_FLAG_HIDDEN); }
+    if (w.second >= lo && w.second < hi && lv_obj_is_valid(w.first)) { lv_image_set_src(w.first, (const void *) nullptr); lv_obj_add_flag(w.first, LV_OBJ_FLAG_HIDDEN); }
   tonen();   // speler/kaart naar de nieuwe x.cover
   for (auto it = x.covers.begin(); it != x.covers.end();) {
     if (it->first >= lo && it->first < hi) {
