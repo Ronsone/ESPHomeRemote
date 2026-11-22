@@ -79,7 +79,7 @@ inline int rnd(int r) { return r >= 10 && r < LV_RADIUS_CIRCLE ? thema().radius 
 
 enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, SCENES = 104, AIRCO = 105, INSTELLINGEN = 113,
                    INST_AFRONDING = 129, INST_REMOTE = 130, DIM_GEREED = 128,
-                   AIRCO_AANUIT = 140, AIRCO_MIN = 141, AIRCO_PLUS = 142, AIRCO_FAN = 143, AIRCO_SWING = 144,
+                   AIRCO_AANUIT = 140, AIRCO_MIN = 141, AIRCO_PLUS = 142, AIRCO_FAN = 143, AIRCO_SWING = 144, AIRCO_HI = 145, AIRCO_ECO = 146,
                    AIRCO_MODUS = 150 /* 150-154 */,
                    LAMP = 400 /* 400+i: lamp i op NOIR Verlichting */,
                    TV_AANUIT = 120, TV_APP = 200 /* 200-205: app-tegels */,
@@ -729,11 +729,12 @@ inline void licht_bouwen(lv_obj_t *laag, const Fonts &f) {
 // De remote kan de stand van de airco niet uitlezen - hij onthoudt zelf wat hij het laatst stuurde (global).
 namespace airco {
 
-struct Stand { bool aan{false}; int modus{1}; int temp{22}; int fan{0}; int swing{0}; };
+// fan: 0 auto, 1-4 stand, 5 HI POWER, 6 ECONO (zoals de knoppen HI en ECO op de afstandsbediening)
+struct Stand { bool aan{false}; int modus{1}; int temp{22}; int fan{0}; int swing{0}; int fan_normaal{0}; };
 inline Stand &st_() { static Stand s; return s; }
 static const char *MODUS_NAAM[5] = {"Auto", "Koel", "Droog", "Fan", "Warm"};
 static const char *MODUS_LANG[5] = {"Automatisch", "Koelen", "Ontvochtigen", "Ventileren", "Verwarmen"};
-static const char *FAN_NAAM[5] = {"Auto", "1", "2", "3", "4"};
+static const char *FAN_NAAM[7] = {"Auto", "1", "2", "3", "4", "HI", "Eco"};
 static const char *SWING_NAAM[4] = {"Uit", "Op/neer", "Links/rechts", "Alles"};
 static const int TEMP_MIN = 18, TEMP_MAX = 30;
 
@@ -750,7 +751,8 @@ inline void uitpakken(int v) {
   s.aan = v & 1;
   s.modus = std::min(4, (v >> 1) & 7);
   s.temp = std::max(TEMP_MIN, std::min(TEMP_MAX, ((v >> 4) & 31) + 16));
-  s.fan = std::min(4, (v >> 9) & 7);
+  s.fan = std::min(6, (v >> 9) & 7);
+  s.fan_normaal = std::min(4, s.fan);
   s.swing = (v >> 12) & 3;
 }
 
@@ -764,7 +766,7 @@ inline std::string bits() {
   std::string b = "0100101001110101110000110101100010100111";   // kop
   b += paar_(lsb_(s.modus, 3) + (s.aan ? "1" : "0") + "0000");
   b += paar_(lsb_(std::max(TEMP_MIN, std::min(TEMP_MAX, s.temp)) - 17, 4) + "0000");
-  b += paar_(lsb_(s.fan, 4) + "0000");
+  b += paar_(lsb_(s.fan <= 4 ? s.fan : s.fan == 5 ? 6 : 9, 4) + "0000");   // HI = 6, ECO = 9
   // lamellen: horizontaal 0 = zwenken, 3 = midden; verticaal 0 = zwenken, 6 = midden
   const int hor = (s.swing & 2) ? 0 : 3, ver = (s.swing & 1) ? 0 : 6;
   const std::string paneel = lsb_(hor, 4) + lsb_(ver, 4);
@@ -794,7 +796,7 @@ inline void sturen(uint32_t ms = 600) {
 }
 
 // Scherm-objecten
-struct Ui { lv_obj_t *temp{nullptr}, *status{nullptr}, *aan{nullptr}, *fan{nullptr}, *swing{nullptr}; lv_obj_t *modus[5]{}; };
+struct Ui { lv_obj_t *temp{nullptr}, *status{nullptr}, *aan{nullptr}, *fan{nullptr}, *swing{nullptr}, *hi{nullptr}, *eco{nullptr}; lv_obj_t *modus[5]{}; };
 inline Ui &ui() { static Ui u; return u; }
 
 inline void tonen() {
@@ -806,6 +808,8 @@ inline void tonen() {
   lv_label_set_text(u.temp, t);
   lv_obj_set_style_text_opa(u.temp, s.aan ? 255 : 110, 0);
   if (!s.aan) snprintf(t, sizeof(t), "Uit");
+  else if (s.fan == 5) snprintf(t, sizeof(t), "%s \xC2\xB7 HI POWER", MODUS_LANG[s.modus]);
+  else if (s.fan == 6) snprintf(t, sizeof(t), "%s \xC2\xB7 Eco", MODUS_LANG[s.modus]);
   else snprintf(t, sizeof(t), "%s \xC2\xB7 fan %s", MODUS_LANG[s.modus], FAN_NAAM[s.fan]);
   lv_label_set_text(u.status, t);
   lv_obj_set_style_border_color(u.aan, k(s.aan ? 0xBFC2C9 : RAND), 0);
@@ -818,7 +822,14 @@ inline void tonen() {
     lv_obj_t *l = lv_obj_get_child(u.modus[i], -1);
     if (l != nullptr) lv_obj_set_style_text_opa(l, sel ? 255 : 160, 0);
   }
-  snprintf(t, sizeof(t), "Fan  %s", FAN_NAAM[s.fan]);
+  for (int i = 0; i < 2; i++) {   // HI / ECO: lichte rand als actief
+    lv_obj_t *b = i == 0 ? u.hi : u.eco;
+    if (b == nullptr) continue;
+    const bool sel = s.fan == 5 + i;
+    lv_obj_set_style_border_color(b, k(sel ? 0xBFC2C9 : RAND), 0);
+    lv_obj_set_style_border_opa(b, sel ? 220 : 115, 0);
+  }
+  snprintf(t, sizeof(t), "Fan  %s", FAN_NAAM[s.fan <= 4 ? s.fan : s.fan_normaal]);
   lv_label_set_text(lv_obj_get_child(u.fan, -1), t);
   snprintf(t, sizeof(t), "Swing  %s", SWING_NAAM[s.swing]);
   lv_label_set_text(lv_obj_get_child(u.swing, -1), t);
@@ -834,7 +845,22 @@ inline void temp_stap(int d) {
 }
 inline void aanuit() { st_().aan = !st_().aan; tonen(); sturen(150); }
 inline void modus(int m) { st_().modus = m; st_().aan = true; tonen(); sturen(150); }
-inline void fan_volgende() { st_().fan = (st_().fan + 1) % 5; tonen(); sturen(); }
+inline void fan_volgende() {
+  Stand &s = st_();
+  s.fan = s.fan <= 4 ? (s.fan + 1) % 5 : s.fan_normaal;   // uit HI/ECO terug naar de gewone stand
+  s.fan_normaal = s.fan;
+  tonen();
+  sturen();
+}
+// HI POWER / ECONO aan of uit (n = 5 of 6); uit = terug naar de laatste gewone fanstand
+inline void fan_speciaal(int n) {
+  Stand &s = st_();
+  if (s.fan <= 4) s.fan_normaal = s.fan;
+  s.fan = s.fan == n ? s.fan_normaal : n;
+  if (!s.aan) s.aan = true;
+  tonen();
+  sturen(150);
+}
 inline void swing_volgende() { st_().swing = (st_().swing + 1) % 4; tonen(); sturen(); }
 
 }  // namespace airco
@@ -880,8 +906,8 @@ inline void airco_bouwen(lv_obj_t *laag, const Fonts &f) {
     u.modus[i] = tekst_knop_(body, i * (bw + 4), 114, bw, 34, AIRCO_MODUS + i, airco::MODUS_NAAM[i], f);
   u.fan = tekst_knop_(body, 0, 158, 104, 34, AIRCO_FAN, "", f);
   u.swing = tekst_knop_(body, 112, 158, 104, 34, AIRCO_SWING, "", f);
-  lv_obj_t *h = label(body, "Pijltjes: temperatuur  \xC2\xB7  OK: aan/uit", 0, 204, 216, f.f12, MUTED);
-  lv_obj_set_style_text_align(h, LV_TEXT_ALIGN_CENTER, 0);
+  u.hi = tekst_knop_(body, 0, 198, 104, 30, AIRCO_HI, "HI POWER", f);
+  u.eco = tekst_knop_(body, 112, 198, 104, 30, AIRCO_ECO, "ECO", f);
   airco::tonen();
 }
 

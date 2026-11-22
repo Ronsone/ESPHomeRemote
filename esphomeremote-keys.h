@@ -1129,6 +1129,8 @@ inline void noir_actie(int a) {
     case noir::AIRCO_PLUS: noir::airco::temp_stap(1); break;
     case noir::AIRCO_FAN: noir::airco::fan_volgende(); break;
     case noir::AIRCO_SWING: noir::airco::swing_volgende(); break;
+    case noir::AIRCO_HI: noir::airco::fan_speciaal(5); break;     // HI POWER
+    case noir::AIRCO_ECO: noir::airco::fan_speciaal(6); break;    // ECONO
     case noir::INSTELLINGEN: noir::zeigen_seite(noir::S_INST); break;   // NOIR UI-instellingen (simulator 13)
     case noir::INST_REMOTE:   // Aggro600-instellingen: menupagina "settings", anders het menu
       ESP_LOGI("noir", "Remote-instellingen: menu %s, pagina settings %s", mn->aktiv() ? "aan" : "UIT",
