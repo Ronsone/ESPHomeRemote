@@ -26,6 +26,8 @@
 #include "freertos/task.h"
 #endif
 #include "esphome/components/menu/mdi_icons.h"
+// LVGL-beeldcache legen voor een src (staat in lv_image_cache.h, dat lvgl.h niet meeneemt)
+extern "C" void lv_image_cache_drop(const void *src);
 
 namespace noir {
 
@@ -1226,7 +1228,7 @@ inline void beeld_vullen_(Beeld &b, uint8_t *px, int w, int h) {
 }
 inline void tonen_(std::vector<Wacht> &lijst, int id, char soort, const lv_image_dsc_t *dsc) {
   for (auto &w : lijst)
-    if (w.id == id && w.soort == soort && w.img != nullptr) { lv_image_set_src(w.img, dsc); lv_obj_remove_flag(w.img, LV_OBJ_FLAG_HIDDEN); }
+    if (w.id == id && w.soort == soort && w.img != nullptr) { lv_image_set_src(w.img, nullptr); lv_image_set_src(w.img, dsc); lv_obj_remove_flag(w.img, LV_OBJ_FLAG_HIDDEN); }
 }
 inline void poster_vragen(int id) {
   Data &x = d();
@@ -1290,6 +1292,7 @@ inline void klaar_() {
     if (!(extra_klaar() && extra_klaar()(t, a.status, a.buf, a.len))) vrij_(a.buf);
   } else if (t.soort == 'b') {
     if (a.status == 200 && a.buf != nullptr && a.len == t.max) {
+      if (x.achter.px != nullptr) lv_image_cache_drop(&x.achter.dsc);   // LVGL mag de oude pixels niet meer uit de cache tekenen (ruis)
       vrij_(x.achter.px);
       beeld_vullen_(x.achter, a.buf, 216, 110);
       x.achter_id = t.id;
@@ -1594,12 +1597,30 @@ inline void cover_zetten_(lv_obj_t *im, int sleutel, int maat) {
   if (im == nullptr) return;
   const lv_image_dsc_t *c = cover_van(sleutel);
   if (c == nullptr) { lv_obj_add_flag(im, LV_OBJ_FLAG_HIDDEN); return; }
+  lv_image_set_src(im, nullptr);   // zelfde dsc met nieuwe pixels: opnieuw laten lezen
   lv_image_set_src(im, c);
   if (c->header.w != maat) lv_image_set_scale(im, 256 * maat / c->header.w);
   lv_obj_remove_flag(im, LV_OBJ_FLAG_HIDDEN);
 }
 inline bool speelt() { return d().sp_state == "playing" || d().sp_state == "paused"; }
 inline void wacht_(lv_obj_t *im, int sleutel) { if (sleutel > 0) d().wacht.push_back({im, sleutel}); }
+// Hoesjes met sleutel in [lo, hi) weggooien (2026-11-22). Eerst alles wat ze toont loskoppelen: anders tekent
+// LVGL uit vrijgegeven geheugen (= ruis in de speler, bv. de hoes van een zoekresultaat na een nieuwe zoekopdracht).
+inline void tonen();
+inline void covers_weg_(int lo, int hi) {
+  Data &x = d();
+  if (x.cover >= lo && x.cover < hi) { x.cover = x.covers.count(COVER_NU) ? COVER_NU : 0; }
+  for (auto &w : x.wacht)
+    if (w.second >= lo && w.second < hi && lv_obj_is_valid(w.first)) { lv_image_set_src(w.first, nullptr); lv_obj_add_flag(w.first, LV_OBJ_FLAG_HIDDEN); }
+  tonen();   // speler/kaart naar de nieuwe x.cover
+  for (auto it = x.covers.begin(); it != x.covers.end();) {
+    if (it->first >= lo && it->first < hi) {
+      lv_image_cache_drop(&it->second.dsc);
+      nf::vrij_(it->second.px);
+      it = x.covers.erase(it);
+    } else ++it;
+  }
+}
 // Binnengekomen hoes: overal tonen waar hij op wacht (objecten van een herbouwd scherm zijn intussen weg)
 inline void cover_binnen_(int sleutel) {
   auto &w = d().wacht;
@@ -1733,6 +1754,7 @@ inline bool klaar_(const nf::Taak &t, int status, uint8_t *buf, size_t len) {
     if (status != 200 || buf == nullptr || len != t.max) return false;
     const int maat = t.soort == 'c' ? 96 : 64;
     Beeld &b = x.covers[t.id];
+    if (b.px != nullptr) lv_image_cache_drop(&b.dsc);   // oude pixels niet meer uit een cache tekenen
     nf::vrij_(b.px);
     beeld_vullen(b, buf, maat, maat);
     cover_binnen_(t.id);
@@ -1742,9 +1764,7 @@ inline bool klaar_(const nf::Taak &t, int status, uint8_t *buf, size_t len) {
   if (t.soort == 'z') {
     x.zoek_bezig = false;
     x.zoek.clear();
-    for (auto it = x.covers.begin(); it != x.covers.end();) {
-      if (it->first >= COVER_ZOEK) { nf::vrij_(it->second.px); it = x.covers.erase(it); } else ++it;
-    }
+    covers_weg_(COVER_ZOEK, 1 << 30);
     if (status == 200 && buf != nullptr) {
       const char *p = (const char *) buf, *eind = p + len;
       while (p < eind) {
@@ -1768,9 +1788,7 @@ inline bool klaar_(const nf::Taak &t, int status, uint8_t *buf, size_t len) {
   x.lijst_bezig = false;
   if (status != 200 || buf == nullptr || len == 0) return false;
   x.playlists.clear(); x.recent.clear(); x.apparaten.clear();
-  for (auto it = x.covers.begin(); it != x.covers.end();) {   // hoesjes van de oude lijst (sleutel = plek) weg
-    if (it->first >= COVER_LIJST && it->first < COVER_ZOEK) { nf::vrij_(it->second.px); it = x.covers.erase(it); } else ++it;
-  }
+  covers_weg_(COVER_LIJST, COVER_ZOEK);   // hoesjes van de oude lijst (sleutel = plek) weg
   const char *p = (const char *) buf, *eind = p + len;
   while (p < eind) {
     const char *e = (const char *) memchr(p, '\n', eind - p);
