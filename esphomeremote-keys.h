@@ -1134,7 +1134,7 @@ inline void noir_item_uitvoeren(JsonObjectConst it) {
   if (t == "page") { noir_menupagina(it["target"] | ""); return; }
   if (t == "special") {
     const std::string pg = it["page"] | "";
-    if (pg == "media") { media_from->value() = 0; media_home_ms->value() = 0; seite_zeigen(page_media, LV_SCR_LOAD_ANIM_MOVE_LEFT); }
+    if (pg == "media") noir_actie(noir::AUDIO);   // NOIR Audio als KEF/Spotify ingesteld is, anders de media-pagina
     else if (pg == "noir_tv") noir_actie(noir::TV);
     else spezial_zeigen(pg);
     return;
