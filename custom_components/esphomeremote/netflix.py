@@ -10,7 +10,7 @@ Bronnen
   endorsed or certified by TMDB."
 
 Voor de remote (geen HA-login, de gedeelde sleutel ?k=):
-  GET /api/esphomeremote/netflix?k=..        {"w": "9-15 nov", "t": [titel...], "p": [titel...]}
+  GET /api/esphomeremote/netflix?k=..        {"w": "9-15 nov", "t": [titel...], "p": [titel...]}  (&f=tsv: tekstregels)
       titel = {"i": tmdb-id, "n": naam, "z": zoeknaam, "j": jaar, "g": genre, "s": seizoenen, "l": leeftijd, "o": tekst}
   GET /api/esphomeremote/netflix/img?k=..&id=<tmdb>&s=p|b
       ruwe RGB565 (little endian) - p: poster 64x96, b: achtergrond 216x110 (onderaan uitlopend naar NOIR-zwart)
@@ -282,6 +282,15 @@ class NetflixData:
             self.beelden.popitem(last=False)
         return raw
 
+    def tsv(self) -> bytes:
+        """Voor de remote: regels zonder JSON (zie esphomeremote-noir.h nf::klaar_)."""
+        schoon = lambda v: str(v or "").replace("\t", " ").replace("\n", " ").replace("\r", " ")  # noqa: E731
+        regels = [f"w\t{schoon(week_tekst(self.week) if self.week else '')}"]
+        for soort, lijst in (("t", self.top10), ("p", self.populair)):
+            for t in lijst:
+                regels.append("\t".join([soort, str(t.get("i", 0))] + [schoon(t.get(k)) for k in ("n", "z", "j", "g", "s", "l", "o")]))
+        return ("\n".join(regels) + "\n").encode()
+
     def json(self) -> bytes:
         return json.dumps({"w": week_tekst(self.week) if self.week else "", "t": self.top10, "p": self.populair},
                           ensure_ascii=False, separators=(",", ":")).encode()
@@ -299,6 +308,8 @@ class NetflixView(HomeAssistantView):
     async def get(self, request: web.Request) -> web.Response:
         if not self.ok(request):
             return web.Response(status=403)
+        if request.query.get("f") == "tsv":
+            return web.Response(body=self.nd.tsv(), content_type="text/plain", charset="utf-8", headers={"Cache-Control": "no-store"})
         return web.Response(body=self.nd.json(), content_type="application/json", headers={"Cache-Control": "no-store"})
 
 

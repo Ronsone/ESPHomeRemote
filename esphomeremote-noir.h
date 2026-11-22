@@ -1227,17 +1227,30 @@ inline void klaar_() {
   Data &x = d();
   const Taak t = a.taak;
   if (t.soort == 'j') {
+    // Tekstregels van HA (geen ArduinoJson: een tweede JSON-variant gaf "l32r: literal target out of range" bij het
+    // linken): "w\t<week>" en "t|p\t<id>\t<naam>\t<zoek>\t<jaar>\t<genre>\t<seizoenen>\t<leeftijd>\t<tekst>"
     x.bezig = false;
     if (a.status == 200 && a.buf != nullptr && a.len > 0) {
-      JsonDocument doc;
-      if (!deserializeJson(doc, (const char *) a.buf, a.len)) {
-        x.week = doc["w"] | "";
-        x.top10.clear(); x.populair.clear();
-        for (JsonObjectConst o : doc["t"].as<JsonArrayConst>()) x.top10.push_back(titel_uit_(o));
-        for (JsonObjectConst o : doc["p"].as<JsonArrayConst>()) x.populair.push_back(titel_uit_(o));
-        x.geladen = true;
-        herbouwen_();
+      x.week.clear(); x.top10.clear(); x.populair.clear();
+      const char *p = (const char *) a.buf, *eind = p + a.len;
+      while (p < eind) {
+        const char *e = (const char *) memchr(p, '\n', eind - p);
+        if (e == nullptr) e = eind;
+        std::vector<std::string> v;
+        const char *q2 = p;
+        for (const char *c = p; c <= e; c++)
+          if (c == e || *c == '\t') { v.emplace_back(q2, c - q2); q2 = c + 1; }
+        if (!v.empty() && v[0] == "w" && v.size() > 1) x.week = v[1];
+        else if (!v.empty() && (v[0] == "t" || v[0] == "p") && v.size() >= 9) {
+          Titel ti;
+          ti.id = atoi(v[1].c_str()); ti.naam = v[2]; ti.zoek = v[3].empty() ? v[2] : v[3]; ti.jaar = v[4];
+          ti.genre = v[5]; ti.seizoenen = atoi(v[6].c_str()); ti.leeftijd = v[7]; ti.tekst = v[8];
+          (v[0] == "t" ? x.top10 : x.populair).push_back(ti);
+        }
+        p = e + 1;
       }
+      x.geladen = true;
+      herbouwen_();
     }
     vrij_(a.buf);
   } else if (t.soort == 'p') {
@@ -1263,7 +1276,7 @@ inline void tik(uint32_t nu, bool zichtbaar) {
   Data &x = d();
   if (a.fertig) { a.fertig = false; a.laeuft = false; klaar_(); }
   if (zichtbaar && !x.bezig && (int32_t) (nu - x.volgende) >= 0) {   // lijsten: bij openen, daarna elk uur
-    const std::string u = url_("/netflix?", "");
+    const std::string u = url_("/netflix?", "&f=tsv");
     if (!u.empty()) {
       x.bezig = true;
       x.volgende = nu + (x.geladen ? 3600000u : 30000u);
@@ -1435,7 +1448,7 @@ inline void nf_detail_bouwen(lv_obj_t *laag, const Fonts &f) {
   x.wacht_detail.push_back({im, t.id, 'b'});
   nf_poster_(body, t, 8, 40, 48, 72, -1, f, x.wacht_detail);
   if (x.detail_plek > 0) {
-    char p[24];
+    char p[32];
     snprintf(p, sizeof(p), "#%d IN NEDERLAND", x.detail_plek);
     rood_label_(body, p, 64, 58, 150, f.f12);
   }
