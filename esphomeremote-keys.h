@@ -1230,6 +1230,10 @@ inline void noir_actie(int a) {
     case noir::AIRCO_HI: noir::airco::fan_speciaal(5); break;     // HI POWER
     case noir::AIRCO_ECO: noir::airco::fan_speciaal(6); break;    // ECONO
     case noir::INSTELLINGEN: noir::zeigen_seite(noir::S_INST); break;   // NOIR UI-instellingen (simulator 13)
+    case noir::INST_WIFI:   // Wi-Fi herstellen (2026-11-23): script in de YAML (uit, 1 s, aan, 10 min geforceerd aan)
+      noir_wifi_herstel->execute();
+      noir::toast("Wi-Fi wordt opnieuw verbonden\xE2\x80\xA6", 3000);
+      break;
     case noir::INST_REMOTE:   // Aggro600-instellingen: menupagina "settings", anders het menu
       ESP_LOGI("noir", "Remote-instellingen: menu %s, pagina settings %s", mn->aktiv() ? "aan" : "UIT",
                mn->hat_seite("settings") ? "ja" : "nee");

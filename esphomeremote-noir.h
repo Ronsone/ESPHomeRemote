@@ -82,7 +82,7 @@ inline lv_color_t k(uint32_t c) { return lv_color_hex(kleur(c)); }
 inline int rnd(int r) { return r >= 10 && r < LV_RADIUS_CIRCLE ? thema().radius : r; }
 
 enum Actie : int { TERUG = 1, THUIS = 100, TV = 101, AUDIO = 102, LICHT = 103, SCENES = 104, AIRCO = 105, INSTELLINGEN = 113,
-                   INST_AFRONDING = 129, INST_REMOTE = 130, DIM_GEREED = 128,
+                   INST_AFRONDING = 129, INST_REMOTE = 130, INST_WIFI = 131, DIM_GEREED = 128,
                    AIRCO_AANUIT = 140, AIRCO_MIN = 141, AIRCO_PLUS = 142, AIRCO_FAN = 143, AIRCO_SWING = 144, AIRCO_HI = 145, AIRCO_ECO = 146, KNOPTEST = 160, TEST_RESET = 161, SCENE_ALLES_UIT = 170,
                    NETFLIX = 106, NF_AFSPELEN = 186,
                    AUDIO_SPOTIFY = 107, AUDIO_AANUIT = 189, SP_SHUFFLE = 187, SP_REPEAT = 188,
@@ -2295,7 +2295,8 @@ inline void inst_bouwen(lv_obj_t *laag, const Fonts &f) {
   snprintf(r, sizeof(r), "Hoeken %d px", t.radius);
   knop_tekst_(knop(body, 0, 152, 104, 34, INST_AFRONDING), r, f);
   knop_tekst_(knop(body, 112, 152, 104, 34, KNOPTEST), "Knoppentest", f);
-  knop_tekst_(knop(body, 0, 194, 216, 34, INST_REMOTE), "Remote-instellingen", f);
+  knop_tekst_(knop(body, 0, 194, 104, 34, INST_REMOTE), "Remote-menu", f);
+  knop_tekst_(knop(body, 112, 194, 104, 34, INST_WIFI), "Wi-Fi herstellen", f);   // 2026-11-23: wifi opnieuw verbinden
 }
 
 // Lagen over page_home bouwen (eenmalig). home = page_home->obj.
