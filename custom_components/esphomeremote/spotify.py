@@ -126,9 +126,66 @@ class SpotifyData:
                 break
         return playlists[:MAX_PER_RIJ], recent
 
+    # ---- Music Assistant (2026-11-23): is de entiteit een MA-speler, dan lijsten/zoeken via de MA-acties ----
+    def _ma_entry(self, eid: str) -> str | None:
+        """config_entry_id van Music Assistant als eid een MA-speler is, anders None."""
+        try:
+            from homeassistant.helpers import entity_registry as er
+            reg = er.async_get(self.hass).async_get(eid)
+        except Exception:   # noqa: BLE001
+            return None
+        if reg is None or reg.platform != "music_assistant":
+            return None
+        return reg.config_entry_id
+
+    async def _ma(self, dienst: str, data: dict):
+        try:
+            return await self.hass.services.async_call("music_assistant", dienst, data, blocking=True, return_response=True)
+        except Exception as err:   # noqa: BLE001
+            _LOGGER.info("Music Assistant %s mislukt: %s", dienst, err)
+            return None
+
+    @staticmethod
+    def _ma_item(x: dict) -> dict | None:
+        if not x or not x.get("uri"):
+            return None
+        artiesten = ", ".join(a.get("name", "") for a in x.get("artists") or [] if isinstance(a, dict))
+        sub = artiesten or {"playlist": "Playlist", "album": "Album", "radio": "Radio", "artist": "Artiest"}.get(x.get("media_type", ""), "")
+        beeld = x.get("image")
+        if isinstance(beeld, dict):
+            beeld = beeld.get("path") or beeld.get("url")
+        return {"naam": _schoon(x.get("name")), "sub": _schoon(sub), "id": x["uri"], "type": x.get("media_type") or "track",
+                "thumb": beeld if isinstance(beeld, str) and beeld.startswith(("http", "/")) else None}
+
+    async def _ma_lijsten(self, eid: str, entry: str):
+        pl = await self._ma("get_library", {"config_entry_id": entry, "media_type": "playlist", "limit": MAX_PER_RIJ})
+        rc = None
+        for order in ("last_played", "timestamp_added"):
+            rc = await self._ma("get_library", {"config_entry_id": entry, "media_type": "track", "limit": MAX_PER_RIJ, "order_by": order})
+            if rc is not None:
+                break
+        lijst = lambda d: [i for i in (self._ma_item(x) for x in ((d or {}).get("items") or [])) if i][:MAX_PER_RIJ]
+        return lijst(pl), lijst(rc)
+
+    async def _ma_zoeken(self, entry: str, q: str) -> list:
+        d = await self._ma("search", {"config_entry_id": entry, "name": q, "limit": 5,
+                                      "media_type": ["track", "playlist", "album", "artist", "radio"]})
+        uit = []
+        for groep in ("tracks", "playlists", "albums", "radio", "artists"):
+            for x in (d or {}).get(groep) or []:
+                i = self._ma_item(x)
+                if i:
+                    uit.append(i)
+        return uit[:10]
+
     async def zoeken(self, eid: str, q: str) -> str:
         q = q.strip()[:60]
         res = []
+        entry = self._ma_entry(eid)
+        if q and entry:
+            res = await self._ma_zoeken(entry, q)
+            _LOGGER.info("Music Assistant zoeken '%s': %d resultaten", q, len(res))
+            q = ""   # Spotify-pad overslaan
         if q:
             data = await self._api(eid, "/search", {"q": q, "type": "track", "limit": 10, "market": "from_token"})
             for t in ((data or {}).get("tracks") or {}).get("items") or []:
@@ -184,8 +241,12 @@ class SpotifyData:
         oud = self.lijsten.get(eid)
         if oud is not None and time.monotonic() - oud[0] < LIJST_TTL:
             return oud[1], oud[2]
-        api = await self._api_lijsten(eid)
-        if api is not None:
+        entry = self._ma_entry(eid)
+        api = await self._ma_lijsten(eid, entry) if entry else await self._api_lijsten(eid)
+        if entry:
+            playlists, recent = api
+            bron = "Music Assistant"
+        elif api is not None:
             playlists, recent = api
             bron = "Web API"
         else:
@@ -209,6 +270,8 @@ class SpotifyData:
         playlists, recent = await self.lijst(eid)
         regels = [f"p\t{x['naam']}\t{x['sub']}\t{x['id']}\t{x['type']}" for x in playlists]
         regels += [f"r\t{x['naam']}\t{x['sub']}\t{x['id']}\t{x['type']}" for x in recent]
+        if self._ma_entry(eid):
+            regels.insert(0, "m\tMusic Assistant")   # de remote noemt het scherm dan "Muziek"
         st = self.hass.states.get(eid)
         for d in (st.attributes.get("source_list") or [])[:6] if st is not None else []:
             regels.append(f"d\t{_schoon(d)}")

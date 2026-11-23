@@ -139,3 +139,10 @@ Substitutions:
 
 De integratie levert `/api/esphomeremote/spotify` (lijsten uit het bladeren van de Spotify-media_player) en
 `/api/esphomeremote/spotify/img` (hoesjes 96/64 px RGB565). De stand komt uit `/states` (elke 2 s zolang het scherm open is).
+
+### Music Assistant (2026-11-23)
+
+Zet `noir_spotify` op een **Music Assistant-speler** (bv. de KEF via AirPlay) in plaats van de Spotify-entiteit.
+De integratie herkent dat en haalt playlists, recent gespeeld en zoekresultaten (alle bronnen: Spotify, radio,
+eigen muziek, …) uit Music Assistant. Het scherm heet dan "Muziek". Afspelen gaat met `media_player.play_media`
+op die speler - geen Spotify Connect-apparaat meer nodig.

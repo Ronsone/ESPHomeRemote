@@ -1553,6 +1553,7 @@ struct Data {
   int repeat{0};                      // 0 uit, 1 alles, 2 nummer
   std::vector<Lijst> playlists, recent, apparaten, zoek;
   std::string zoek_tekst;
+  bool ma{false};                              // lijsten komen van Music Assistant (scherm heet dan "Muziek")
   bool zoek_bezig{false}, zoek_toetsen{true};   // zoek_toetsen = toetsenbord zichtbaar (anders de resultaten groot)
   int invoer{0};                                // 0 letterwiel, 1 QWERTY
   int wiel_groep{0}, wiel_pos{0};               // letterwiel: tekenset (abc/ABC/123/#+=) en gekozen teken
@@ -1574,6 +1575,7 @@ struct Ui {
   lv_obj_t *vol_sld{nullptr}, *vol_w{nullptr}, *sub_sld{nullptr}, *sub_w{nullptr};
   lv_obj_t *sp_titel{nullptr}, *sp_sub{nullptr}, *sp_cover{nullptr}, *sp_balk{nullptr}, *sp_tijd{nullptr}, *sp_app{nullptr};
   lv_obj_t *sp_shuffle{nullptr}, *sp_repeat{nullptr};
+  lv_obj_t *np_bron{nullptr};
 };
 inline Ui &ui() { static Ui u; return u; }
 inline void beeld_vullen(Beeld &b, uint8_t *px, int w, int h) {
@@ -1667,6 +1669,10 @@ inline void tonen() {
   // Nu speelt (Audio-kaart en Spotify-scherm)
   const std::string titel = speelt() ? x.titel : "Niets aan het afspelen";
   std::string sub = speelt() ? x.artiest : "Kies een playlist";
+  if (u.np_bron != nullptr && lv_obj_is_valid(u.np_bron)) {
+    lv_label_set_text(u.np_bron, x.ma ? "MUZIEK" : "SPOTIFY");
+    lv_obj_set_style_text_color(u.np_bron, x.ma ? k(TEXT2) : lv_color_hex(0x1DB954), 0);
+  }
   if (u.np_titel != nullptr) {
     lv_label_set_text(u.np_titel, titel.c_str());
     std::string s2 = sub;
@@ -1787,7 +1793,7 @@ inline bool klaar_(const nf::Taak &t, int status, uint8_t *buf, size_t len) {
   if (t.soort != 'a') return false;
   x.lijst_bezig = false;
   if (status != 200 || buf == nullptr || len == 0) return false;
-  x.playlists.clear(); x.recent.clear(); x.apparaten.clear();
+  x.playlists.clear(); x.recent.clear(); x.apparaten.clear(); x.ma = false;
   covers_weg_(COVER_LIJST, COVER_ZOEK);   // hoesjes van de oude lijst (sleutel = plek) weg
   const char *p = (const char *) buf, *eind = p + len;
   while (p < eind) {
@@ -1800,6 +1806,7 @@ inline bool klaar_(const nf::Taak &t, int status, uint8_t *buf, size_t len) {
       auto &l = v[0] == "p" ? x.playlists : x.recent;
       if (l.size() < 12) l.push_back({v[1], v[2], v[3], v[4], (v[0] == "p" ? COVER_LIJST : COVER_RECENT) + (int) l.size()});
     } else if (v.size() >= 2 && v[0] == "d" && x.apparaten.size() < 6) x.apparaten.push_back({v[1], "", v[1], ""});
+    else if (!v.empty() && v[0] == "m") x.ma = true;
     p = e + 1;
   }
   x.lijst_geladen = true;
@@ -2072,7 +2079,7 @@ inline void audio_bouwen(lv_obj_t *laag, const Fonts &f) {
   // Nu speelt
   lv_obj_t *np = knop(body, 0, 48, 216, 76, AUDIO_SPOTIFY);
   u.np_cover = cover_vak_(np, 10, 10, 56, 0, ICO_NOOT, f);
-  groen_label_(np, "SPOTIFY", 76, 9, 80, f.f12);
+  u.np_bron = groen_label_(np, "SPOTIFY", 76, 9, 80, f.f12);
   u.np_titel = label(np, "", 76, 25, 130, f.f14 != nullptr ? f.f14 : f.f12, TEXT);
   u.np_sub = label(np, "", 76, 45, 130, f.f12, MUTED);
   detail(np, 6, 70, 204, 2, RAND, 160, 1);
@@ -2112,7 +2119,8 @@ inline void spotify_bouwen(lv_obj_t *laag, const Fonts &f) {
   audio::Ui &u = audio::ui();
   audio::Data &x = audio::d();
   lv_obj_t *body = s.spotify_body = body_maken(laag, true);
-  groen_label_(body, "Spotify", 0, 0, 110, f.f20 != nullptr ? f.f20 : f.f16);
+  lv_obj_t *kopl = groen_label_(body, x.ma ? "Muziek" : "Spotify", 0, 0, 110, f.f20 != nullptr ? f.f20 : f.f16);
+  if (x.ma) lv_obj_set_style_text_color(kopl, k(TEXT), 0);
   u.sp_app = label(body, "", 92, 6, 124, f.f12, MUTED);
   lv_obj_set_style_text_align(u.sp_app, LV_TEXT_ALIGN_RIGHT, 0);
   u.sp_cover = cover_vak_(body, 0, 34, 96, x.cover, ICO_NOOT, f);
