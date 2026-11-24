@@ -30,6 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 
 LIJST_TTL = 600            # s
 MAX_PER_RIJ = 12
+MA_DOMEINEN = ("music_assistant", "mass")   # mass = oudere HACS-versie van de MA-koppeling
 SOORT_NAAM = {"playlist": "Playlist", "album": "Album", "radio": "Radio", "artist": "Artiest"}
 
 
@@ -69,6 +70,7 @@ class MuziekData:
         self.lijsten: dict[str, tuple[float, list, list]] = {}   # speler -> (tijd, playlists, recent)
         self.zoek: dict[str, list] = {}                          # speler -> laatste zoekresultaten
         self.beelden: OrderedDict[str, bytes] = OrderedDict()
+        self.domein = "music_assistant"   # service-domein van de gevonden MA-koppeling
 
     def _entry(self, eid: str) -> str | None:
         """config_entry_id van Music Assistant voor deze speler (of de eerste MA-koppeling)."""
@@ -77,18 +79,22 @@ class MuziekData:
             reg = er.async_get(self.hass).async_get(eid)
         except Exception:   # noqa: BLE001
             reg = None
-        if reg is not None and reg.platform == "music_assistant":
+        platform = reg.platform if reg is not None else None
+        if platform in MA_DOMEINEN and reg.config_entry_id:
+            self.domein = platform
             return reg.config_entry_id
-        entries = self.hass.config_entries.async_entries("music_assistant")
+        entries = [e for d in MA_DOMEINEN for e in self.hass.config_entries.async_entries(d)]
         if entries:
-            _LOGGER.warning("%s is geen Music Assistant-speler - kies er een in de NOIR Builder (Audio > Music)", eid)
+            _LOGGER.warning("%s is geen Music Assistant-speler (platform %s) - kies een MA-speler in de NOIR Builder (Audio > Music)", eid, platform)
+            self.domein = entries[0].domain
             return entries[0].entry_id
-        _LOGGER.warning("Music Assistant is niet ingesteld in Home Assistant")
+        _LOGGER.warning("Geen Music Assistant-koppeling gevonden (speler %s, platform %s; koppelingen: %s)", eid, platform,
+                        sorted({e.domain for e in self.hass.config_entries.async_entries()} & {"music_assistant", "mass", "cast", "kef"}))
         return None
 
     async def _ma(self, dienst: str, data: dict):
         try:
-            return await self.hass.services.async_call("music_assistant", dienst, data, blocking=True, return_response=True)
+            return await self.hass.services.async_call(self.domein, dienst, data, blocking=True, return_response=True)
         except Exception as err:   # noqa: BLE001
             _LOGGER.info("Music Assistant %s mislukt: %s", dienst, err)
             return None
