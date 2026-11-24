@@ -1703,6 +1703,7 @@ inline void tonen() {
 // ---- NOIR Audio: gegevens uit HA en bediening ------------------------------------------------------------------
 inline void spotify_herbouwen();
 inline void zoek_herbouwen();
+namespace kef { inline std::string &entiteit(); }   // verderop gedefinieerd (NOIR Builder zet de speaker)
 namespace audio {
 // Stand uit /states (licht_http, elke 2 s zolang Audio/Spotify open is): KEF, subwoofer, Spotify
 // media_player: [state, bri, volume 0-100, unit, titel, artiest, stil, shuffle, repeat, app, source, positie, duur, leeftijd]
@@ -1838,9 +1839,26 @@ inline void koppelen() {
   licht_http::extra_lees() = lees_;
   nf::extra_klaar() = klaar_;
 }
-inline void instellen(const std::string &kef, const std::string &sub, const std::string &spotify) {
-  d().kef = kef; d().sub_e = sub; d().spotify = spotify;
+// Entiteiten: substitutions uit de YAML (instellen) met daarboven de keuze uit de NOIR Builder (cfg.noir_audio,
+// 2026-11-24) - wat in de builder gekozen is wint, leeg = de YAML-waarde
+struct Bronnen_ { std::string kef, sub, muziek; };
+inline Bronnen_ &yaml_() { static Bronnen_ b; return b; }
+inline Bronnen_ &cfg_() { static Bronnen_ b; return b; }
+inline void toepassen_() {
+  const Bronnen_ &y = yaml_(), &c = cfg_();
+  d().kef = c.kef.empty() ? y.kef : c.kef;
+  d().sub_e = c.sub.empty() ? y.sub : c.sub;
+  d().spotify = c.muziek.empty() ? y.muziek : c.muziek;
+  if (!d().kef.empty()) kef::entiteit() = d().kef;   // ook de volumetoetsen op die speaker
   koppelen();
+}
+inline void instellen(const std::string &kef, const std::string &sub, const std::string &spotify) {
+  yaml_() = {kef, sub, spotify};
+  toepassen_();
+}
+inline void cfg_laden(JsonObjectConst o) {
+  cfg_() = {o["kef"] | "", o["sub"] | "", o["music"] | ""};
+  toepassen_();
 }
 // ---- bediening (acties van het scherm) ----
 inline void bron_kiezen(int i) {

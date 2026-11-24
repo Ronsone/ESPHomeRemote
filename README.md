@@ -22,20 +22,15 @@ TV, Netflix, KEF audio with Spotify, lights, scenes and air conditioning – dri
 
 **Reliability:** a Wi-Fi watchdog restarts the remote if Wi-Fi does not come back. Hold the power key for 3 seconds to get the shut-down prompt.
 
-## Setup (short)
+## Setup in 3 steps
 
-1. Install the `esphomeremote` integration in Home Assistant (HACS → custom repository → this repo).
-2. Build the firmware for the Rev6 with ESPHome and set the NOIR substitutions:
+1. **Firmware** – build it for the Rev6 with ESPHome (`noir_aan: "true"`).
+2. **Integration** – HACS → custom repository → this repo → install *ESPHomeRemote*.
+3. **NOIR Builder** – in Home Assistant, build your screens: tiles, lights, scenes, audio. Press *Save*, done. No new firmware.
 
-   ```yaml
-   substitutions:
-     noir_kef_entity: media_player.your_kef
-     noir_kef_sub:    number.your_kef_sub_gain
-     noir_spotify:    media_player.spotify_you
-   ```
-3. Optional: add a TMDB API key in the integration options for Netflix posters.
+<p align="center"><img src="docs/noir/builder.png" alt="NOIR Builder" width="100%"></p>
 
-More details: [docs/noir.md](docs/noir.md).
+Full guide: [docs/noir.md](docs/noir.md).
 
 ## Simulator
 

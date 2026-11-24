@@ -2106,6 +2106,7 @@ class EsphomeremoteKonfigurator extends HTMLElement {
       j[t.dataset.jz] = t.type === "checkbox" ? t.checked : t.value;
       this._jetztSpeichern(); return;
     }
+    if (t.dataset.nb) { this._nbChange(t); return this._render(); }   // NOIR Builder (2026-11-24)
     if (t.dataset.nairco) {   // NOIR Airco-instellingen (cfg.noir_airco, 2026-11-22)
       const a = (this.cfg.noir_airco ||= {});
       const v = parseInt(t.value, 10);
@@ -2365,6 +2366,16 @@ const M_SPECIAL = [
   ["touchpad", "Touchpad (Maus)"], ["dock", "Smart Display"], ["musik", "Musik-Anzeige"], ["extras", "Smart Display (Einstellungen)"], ["gesten", "Gesten (Seite der Remote)"],
 ];
 const M_SPECIAL_L = Object.fromEntries(M_SPECIAL);
+// NOIR Builder (2026-11-24): Reiter, "Opens"-Auswahl, Funktionen der Remote je Ziel, Standard-Symbole
+const NB_TABS = [["home", "Home", "mdi:home-outline"], ["lights", "Lights", "mdi:lightbulb-outline"], ["scenes", "Scenes", "mdi:layers-outline"],
+  ["audio", "Audio", "mdi:music"], ["airco", "Airco", "mdi:air-conditioner"], ["settings", "Settings", "mdi:cog-outline"]];
+const NB_OPENS = [["tv", "TV screen"], ["audio", "Audio & music"], ["lights", "Lights screen"], ["scenes", "Scenes screen"], ["airco", "Airco screen"],
+  ["netflix", "Netflix"], ["settings", "Remote settings"], ["toggle", "Toggle an entity"], ["run", "Run a scene or script"], ["advanced", "Advanced (steps)"]];
+const NB_OPENS_L = { tv: "TV", audio: "Audio", lights: "Verlichting", scenes: "Scènes", airco: "Airco", netflix: "Netflix", settings: "Instellingen" };
+const NB_FN = { tv: "noir_tv", lights: "noir_licht", scenes: "noir_scenes", airco: "noir_airco", netflix: "noir_netflix", settings: "noir_inst" };
+const NB_ICON = { tv: "noir:tv", audio: "noir:audio", lights: "noir:licht", scenes: "noir:scenes", airco: "mdi:air-conditioner", netflix: "mdi:netflix",
+  settings: "mdi:cog", toggle: "mdi:lightbulb", run: "mdi:play", advanced: "mdi:gesture-tap-button" };
+const NB_NOIR_ICONS = ["noir:tv", "noir:audio", "noir:licht", "noir:scenes"];
 // Eingebauter Inhalt eines Popups statt Eintraegen (2026-10-13 Tastatur, 2026-10-27 Ziffern/Touchpad)
 const M_INHALTE = [["tastatur", "Eingebaute Tastatur"], ["ziffern", "Eingebauter Ziffernblock"], ["touchpad", "Eingebautes Touchpad (Maus)"]];
 const M_INHALT_HINWEIS = {
@@ -7392,9 +7403,10 @@ const EinstTab = {
   },
   // Akzentfarbe der Remote (cfg.akzent): bei Tasten (unter dem Remote-Bild) und unter Einstellungen › Anzeige (2026-11-01,
   // Nutzer: "wo kann ich die Akzentfarbe einstellen ... gesamt irgendwo")
-  // ---- NOIR-Builder (2026-11-22) ----------------------------------------------------------------------------------
-  // Die Kacheln von NOIR Thuis sind die Eintraege der Menueseite "noir" (Firmware esphomeremote-noir.h). Bearbeitet
-  // wird sie im normalen Menue-Editor (Kacheln, Symbole, Schritte, Groesse/Position); hier Vorschau im NOIR-Stil.
+  // ---- NOIR Builder (2026-11-24, English, Nutzer: "in 1 oogopslag zien hoe die werkt") ----------------------------
+  // Ein Reiter je Bildschirm der Remote, links Live-Vorschau, rechts einfache Zeilen. Daten wie bisher: Menueseiten
+  // "noir" (Kacheln Thuis), "noir_licht" (Lampen), "noir_scenes" (Szenen), dazu cfg.noir_airco und cfg.noir_audio.
+  // Positionen der Kacheln rechnet der Builder selbst (halb = 3x2, ganz = 6x2); Sonderfaelle: "Advanced (steps)".
   _noirSeite() { return (this.cfg.menu?.pages || []).find((p) => p.id === "noir"); },
   _noirStandard() {
     const t = (label, icon, x, y, w, h, rest) => ({ t: "action", label, icon, x, y, w, h, ...rest });
@@ -7408,129 +7420,290 @@ const EinstTab = {
   },
   _noirLicht() { return (this.cfg.menu?.pages || []).find((p) => p.id === "noir_licht"); },
   _noirScenes() { return (this.cfg.menu?.pages || []).find((p) => p.id === "noir_scenes"); },
-  _noirClick(a, t) {
+  _nbPage(id, anlegen = true) {
     const m = this.menu;
-    if (a === "noir_licht") {   // NOIR Verlichting (2026-11-22): Lampen = Eintraege der Menueseite "noir_licht"
-      if (!this._noirLicht()) { m.pages.push({ id: "noir_licht", title: "NOIR Verlichting", items: [] }); this._touch(); }
-      this._seiteMerken?.("menu");
-      this.s.mode = "menu"; this.s.mpage = "noir_licht"; this.s.mitem = null;
-      return;
+    let p = m.pages.find((x) => x.id === id);
+    if (!p && anlegen) {
+      p = { id, title: { noir: "NOIR Thuis", noir_licht: "NOIR Verlichting", noir_scenes: "NOIR Scènes" }[id] || id,
+        items: id === "noir" ? this._noirStandard() : [] };
+      m.pages.push(p);
     }
-    if (a === "noir_scenes") {   // NOIR Scènes (2026-11-22): Szenen = Eintraege der Menueseite "noir_scenes"
-      if (!this._noirScenes()) {
-        m.pages.push({ id: "noir_scenes", title: "NOIR Scènes", items: [
-          { t: "action", label: "Film", icon: "mdi:movie-open", x: 0, y: 0, w: 3, h: 2, steps: [] },
-          { t: "action", label: "Diner", icon: "mdi:silverware-fork-knife", x: 3, y: 0, w: 3, h: 2, steps: [] },
-        ] });
-        this._touch();
-      }
-      this._seiteMerken?.("menu");
-      this.s.mode = "menu"; this.s.mpage = "noir_scenes"; this.s.mitem = null;
-      return;
+    return p;
+  },
+  // Was eine Kachel oeffnet - aus dem Eintrag gelesen, damit auch alte/handgebaute Kacheln richtig erscheinen
+  _nbArt(it) {
+    if (it.t === "special") return it.page === "media" ? "audio" : it.page === "noir_tv" ? "tv" : "advanced";
+    const st = it.steps || [];
+    if (it.t === "action" && st.length === 1 && st[0].t === "int") {
+      const k = Object.keys(NB_FN).find((x) => NB_FN[x] === st[0].fn);
+      if (k) return k;
     }
-    if (a === "noir_scenes_weg") {
-      if (!confirm("Eigene Szenen löschen? NOIR Scènes zeigt dann nur noch „Alles uit“.")) return;
-      m.pages = m.pages.filter((p) => p.id !== "noir_scenes");
+    if (st.length) return "advanced";
+    if (it.t === "toggle" || it.t === "light") return "toggle";
+    if (it.t === "action" && /^(scene|script)\./.test(it.entity || "")) return "run";
+    if (it.t === "action" && !it.entity) return "advanced";
+    return "advanced";
+  },
+  _nbMachen(art, alt = {}) {
+    const n = { label: alt.label ?? NB_OPENS_L[art] ?? "", icon: alt.icon || NB_ICON[art] || "mdi:gesture-tap-button", w: alt.w ?? 3, h: 2, x: 0, y: 0 };
+    if (art === "audio") return { ...n, t: "special", page: "media" };
+    if (NB_FN[art]) return { ...n, t: "action", steps: [{ t: "int", fn: NB_FN[art] }] };
+    if (art === "toggle") { const e = /^(light|switch|input_boolean|fan)\./.test(alt.entity || "") ? alt.entity : ""; return { ...n, t: e.startsWith("light.") ? "light" : "toggle", entity: e }; }
+    if (art === "run") { const e = /^(scene|script)\./.test(alt.entity || "") ? alt.entity : ""; return { ...n, t: "action", entity: e }; }
+    return { ...n, t: "action", steps: alt.steps || [] };
+  },
+  // Raster wie auf der Remote: halbe Kacheln paarweise nebeneinander, ganze allein in einer Zeile
+  _nbLayout(items, breit = 6) {
+    let x = 0, y = 0;
+    for (const it of items) {
+      const voll = (it.w || 6) >= 6;
+      if (voll && x > 0) { x = 0; y += 2; }
+      it.x = x; it.y = y; it.w = voll ? 6 : 3; it.h = 2;
+      if (voll) y += 2; else if (x === 0) x = 3; else { x = 0; y += 2; }
+    }
+    void breit;
+  },
+  _nbLights(p) {   // Lampen untereinander, eine Zeile hoch (fuer den Menue-Editor; die Firmware nimmt die Reihenfolge)
+    (p.items || []).forEach((it, i) => { it.x = 0; it.y = i; it.w = 6; it.h = 1; });
+  },
+  _nbIconSel(feld, wert, extra) {
+    const liste = [...NB_NOIR_ICONS, ...M_ICONS.map((x) => "mdi:" + x)];
+    if (wert && !liste.includes(wert)) liste.unshift(wert);
+    return `<span class="nbico"><ha-icon icon="${esc(this._nbIconHa(wert))}"></ha-icon><select ${extra} data-f="${feld}" title="Icon">${liste.map((x) => `<option value="${esc(x)}" ${x === wert ? "selected" : ""}>${esc(x.replace(/^mdi:/, ""))}</option>`).join("")}</select></span>`;
+  },
+  _nbIconHa(icon) { return { "noir:tv": "mdi:television", "noir:audio": "mdi:waveform", "noir:licht": "mdi:floor-lamp-outline", "noir:scenes": "mdi:layers-outline" }[icon] || icon || "mdi:square-rounded-outline"; },
+  _nbEntListen() {
+    const st = this._hass?.states || {};
+    const name = (e) => st[e]?.attributes?.friendly_name || e;
+    const dl = (id, doms) => `<datalist id="${id}">${Object.keys(st).filter((e) => doms.includes(e.split(".")[0])).sort()
+      .map((e) => `<option value="${esc(e)}">${esc(name(e))}</option>`).join("")}</datalist>`;
+    return dl("nbl-licht", ["light", "switch", "input_boolean", "fan"]) + dl("nbl-run", ["scene", "script"]);
+  },
+  _nbEntSel(feld, wert, doms, extra, leer = "— not set —") {
+    const st = this._hass?.states || {};
+    const name = (e) => st[e]?.attributes?.friendly_name || e;
+    const alle = Object.keys(st).filter((e) => doms.includes(e.split(".")[0])).sort((a, b) => name(a).localeCompare(name(b)));
+    if (wert && !alle.includes(wert)) alle.unshift(wert);
+    return `<select ${extra} data-f="${feld}"><option value="">${leer}</option>${alle.map((e) => `<option value="${esc(e)}" ${e === wert ? "selected" : ""}>${esc(name(e))} · ${esc(e)}</option>`).join("")}</select>`;
+  },
+  _nbChange(t) {
+    const art = t.dataset.nb, f = t.dataset.f, i = Number(t.dataset.i);
+    const v = t.type === "checkbox" ? t.checked : String(t.value || "").trim();
+    if (art === "audio") {
+      const a = (this.cfg.noir_audio ||= {});
+      if (v) a[f] = v; else delete a[f];
+      if (!Object.keys(a).length) delete this.cfg.noir_audio;
+      this._touch(); return;
+    }
+    const p = this._nbPage({ home: "noir", lights: "noir_licht", scenes: "noir_scenes" }[art]);
+    const it = p.items[i];
+    if (!it) return;
+    if (art === "home") {
+      if (f === "opens") { p.items[i] = this._nbMachen(v, it); this.s.nbSel = i; }
+      else if (f === "size") it.w = v === "full" ? 6 : 3;
+      else if (f === "entity") { it.entity = v; if (this._nbArt(it) === "toggle") it.t = v.startsWith("light.") ? "light" : "toggle"; }
+      else if (f === "label") it.label = v.slice(0, 24);
+      else if (f === "icon") it.icon = v;
+      this._nbLayout(p.items);
+    } else if (art === "lights") {
+      if (f === "entity") { it.entity = v; it.t = v.startsWith("light.") ? "light" : "toggle"; if (!it.label) it.label = this._hass?.states[v]?.attributes?.friendly_name || ""; }
+      else if (f === "label") it.label = v.slice(0, 24);
+      else if (f === "dim") it.dim = !!v;
+    } else if (art === "scenes") {
+      if (f === "entity") { it.entity = v; if (!it.label) it.label = this._hass?.states[v]?.attributes?.friendly_name || ""; }
+      else if (f === "label") it.label = v.slice(0, 24);
+      else if (f === "icon") it.icon = v;
+      this._nbLayout(p.items.map((x) => (x.w = 3, x)));
+    }
+    this._touch();
+  },
+  _noirClick(a, t) {
+    const m = this.menu, s = this.s, i = Number(t.dataset.i);
+    const pid = { home: "noir", lights: "noir_licht", scenes: "noir_scenes" }[t.dataset.p];
+    const zumMenue = (id, idx = null) => { this._nbPage(id); this._seiteMerken?.("menu"); s.mode = "menu"; s.mpage = id; s.mitem = idx; };
+    if (a === "noir_nb_tab") { s.nbTab = t.dataset.tab; s.nbSel = null; return; }
+    if (a === "noir_nb_sel") { s.nbTab = "home"; s.nbSel = i; return; }
+    if (a === "noir_nb_add") {
+      const p = this._nbPage(pid);
+      if (t.dataset.p === "home") { p.items.push(this._nbMachen("toggle", { label: "New tile" })); this._nbLayout(p.items); s.nbSel = p.items.length - 1; }
+      else if (t.dataset.p === "lights") { p.items.push({ t: "light", label: "", entity: "", dim: true }); this._nbLights(p); }
+      else { p.items.push({ t: "action", label: "", icon: "mdi:play", entity: "", w: 3 }); this._nbLayout(p.items); }
+      this._touch(); return;
+    }
+    if (a === "noir_nb_up" || a === "noir_nb_down" || a === "noir_nb_del") {
+      const p = this._nbPage(pid), it = p.items;
+      if (a === "noir_nb_del") it.splice(i, 1);
+      else { const j = a === "noir_nb_up" ? i - 1 : i + 1; if (j < 0 || j >= it.length) return; [it[i], it[j]] = [it[j], it[i]]; if (s.nbSel === i) s.nbSel = j; }
+      if (t.dataset.p === "lights") this._nbLights(p); else this._nbLayout(it);
+      this._touch(); return;
+    }
+    if (a === "noir_nb_steps") { zumMenue(pid, i); return; }   // Advanced: Schritte im Menue-Editor
+    if (a === "noir_nb_menu") { zumMenue(t.dataset.id); return; }
+    if (a === "noir_reset") {
+      if (!confirm("Reset the home screen to the default tiles (TV, Audio, Lights, Scenes, Airco)?")) return;
+      this._nbPage("noir").items = this._noirStandard();
       this._touch(); return;
     }
     if (a === "noir_licht_weg") {
-      if (!confirm("Lampenliste löschen? NOIR Verlichting nutzt dann wieder noir_lampen aus der YAML.")) return;
-      m.pages = m.pages.filter((p) => p.id !== "noir_licht");
-      this._touch(); return;
-    }
-    if (a === "noir_edit" || a === "noir_new") {
-      if (!this._noirSeite()) { m.pages.push({ id: "noir", title: "NOIR Thuis", items: this._noirStandard() }); this._touch(); }
-      this._seiteMerken?.("menu");
-      this.s.mode = "menu"; this.s.mpage = "noir"; this.s.mitem = null;
-      return;
-    }
-    if (a === "noir_reset") {
-      if (!confirm("Kacheln von NOIR Thuis auf den Standard zurücksetzen (TV, Audio, Verlichting, Scènes, Airco)?")) return;
-      const p = this._noirSeite();
-      if (p) p.items = this._noirStandard(); else m.pages.push({ id: "noir", title: "NOIR Thuis", items: this._noirStandard() });
-      this._touch(); return;
-    }
-    if (a === "noir_weg") {
-      if (!confirm("Eigene Kacheln löschen? NOIR Thuis zeigt dann wieder die eingebauten Kacheln.")) return;
-      m.pages = m.pages.filter((p) => p.id !== "noir");
-      this._touch(); return;
+      if (!confirm("Remove your light list? The Lights screen then uses noir_lampen from the YAML again.")) return;
+      m.pages = m.pages.filter((p) => p.id !== "noir_licht"); this._touch(); return;
     }
   },
-  // Kachel-Vorschau wie auf der Remote: 216 px Raster (6 Spalten, Abstand 8), Zeile 31 px
-  _noirVorschau(items) {
-    const ic = (icon) => {
-      if (!icon) return "";
-      const n = { "noir:tv": "mdi:television", "noir:audio": "mdi:waveform", "noir:licht": "mdi:floor-lamp-outline", "noir:scenes": "mdi:layers-outline" }[icon] || icon;
-      return `<ha-icon icon="${esc(n)}"></ha-icon>`;
-    };
-    const kach = (items || []).map((it) => {
+  // Kachel-Vorschau wie auf der Remote: 216 px Raster (6 Spalten, Abstand 8), Zeile 31 px; Kachel antippen = bearbeiten
+  _noirVorschau(items, sel = null) {
+    const kach = (items || []).map((it, i) => {
       const x = Math.max(0, Math.min(5, it.x || 0)), w = Math.max(1, Math.min(6 - x, it.w || 6)), y = it.y || 0, h = Math.max(1, Math.min(6, it.h || 2));
       const px = Math.floor(x * 224 / 6), pw = Math.floor((x + w) * 224 / 6) - px - 8, py = 52 + y * 31, ph = h * 31 - 6;
       if (it.t === "text") return `<span class="nvtxt" style="left:${px}px;top:${py + 4}px;width:${pw}px">${esc(it.label || "")}</span>`;
-      return `<span class="nvk ${ph >= 46 ? "gross" : "klein"}" style="left:${px}px;top:${py}px;width:${pw}px;height:${ph}px">${ic(it.icon)}<b>${esc(it.label || "")}</b></span>`;
+      return `<span class="nvk ${ph >= 46 ? "gross" : "klein"} ${sel === i ? "nbsel" : ""}" data-a="noir_nb_sel" data-i="${i}" style="left:${px}px;top:${py}px;width:${pw}px;height:${ph}px"><ha-icon icon="${esc(this._nbIconHa(it.icon))}"></ha-icon><b>${esc(it.label || "")}</b></span>`;
     }).join("");
-    return `<div class="noirv"><div class="nvbar"><i>23:55</i><span class="grow"></span><i>82%</i></div>
-      <div class="nvbody"><b class="nvt">NOIR / SIGNATURE</b><small class="nvs">Home Control</small><span class="nvk nvcog"><ha-icon icon="mdi:cog"></ha-icon></span>${kach}</div>
-      <div class="nvfuss"><span class="nvk"><ha-icon icon="mdi:arrow-left"></ha-icon>Terug</span><span class="nvk"><ha-icon icon="mdi:home"></ha-icon>Thuis</span></div></div>`;
+    return this._nbRahmen(`<b class="nvt">NOIR / SIGNATURE</b><small class="nvs">Home Control</small><span class="nvk nvcog"><ha-icon icon="mdi:cog"></ha-icon></span>${kach}`);
+  },
+  _nbRahmen(innen) {
+    return `<div class="noirv"><div class="nvbar"><i>21:42</i><span class="grow"></span><i>82%</i></div>
+      <div class="nvbody">${innen}</div>
+      <div class="nvfuss"><span class="nvk"><ha-icon icon="mdi:arrow-left"></ha-icon>Back</span><span class="nvk"><ha-icon icon="mdi:home"></ha-icon>Home</span></div></div>`;
+  },
+  _nbVorschauLicht(items) {
+    const st = this._hass?.states || {};
+    const zeilen = items.filter((it) => it.entity).map((it, i) => {
+      const z = st[it.entity], an = z?.state === "on", bri = z?.attributes?.brightness;
+      const txt = !z ? "?" : !an ? "Off" : bri != null ? `${Math.round(bri / 2.55)}%` : "On";
+      return `<span class="nvk ${an ? "" : "nbaus"}" style="left:0;top:${40 + i * 46}px;width:216px;height:38px;justify-content:center">${esc(it.label || it.entity)} · ${txt}</span>`;
+    }).join("");
+    return this._nbRahmen(`<b class="nvt">Verlichting</b>${zeilen || `<small class="nvs" style="top:44px">No lights yet</small>`}`);
+  },
+  _nbVorschauScenes(items) {
+    const tg = [{ label: "Alles uit", icon: "mdi:power" }, ...items.filter((x) => x.label)];
+    return this._nbRahmen(`<b class="nvt">Scènes</b>${tg.map((it, n) => `<span class="nvk gross" style="left:${(n % 2) * 112}px;top:${36 + Math.floor(n / 2) * 64}px;width:104px;height:56px"><ha-icon icon="${esc(this._nbIconHa(it.icon))}"></ha-icon><b>${esc(it.label)}</b></span>`).join("")}`);
+  },
+  _nbVorschauAudio() {
+    const st = this._hass?.states || {}, a = this.cfg.noir_audio || {};
+    const n = (e) => (e && st[e]?.attributes?.friendly_name) || e || "from YAML";
+    const mz = a.music && st[a.music];
+    return this._nbRahmen(`<b class="nvt">Audio</b>
+      <span class="nvk" style="left:0;top:40px;width:216px;height:38px"><ha-icon icon="mdi:speaker"></ha-icon><b>${esc(n(a.kef))}</b></span>
+      <span class="nvk" style="left:0;top:86px;width:216px;height:38px"><ha-icon icon="mdi:speaker-wireless"></ha-icon><b>Sub · ${a.sub && st[a.sub] ? esc(st[a.sub].state) : "—"}</b></span>
+      <span class="nvk gross" style="left:0;top:132px;width:216px;height:70px"><ha-icon icon="mdi:music"></ha-icon><b>${mz?.attributes?.media_title ? esc(mz.attributes.media_title) : esc(n(a.music))}</b></span>`);
+  },
+  _nbZeile(art, i, len, innen) {
+    return `<div class="nbrow nb-${art}">${innen}<span class="nbacts">
+      <button class="icon sm" data-a="noir_nb_up" data-p="${art}" data-i="${i}" ${i === 0 ? "disabled" : ""} title="Up"><ha-icon icon="mdi:arrow-up"></ha-icon></button>
+      <button class="icon sm" data-a="noir_nb_down" data-p="${art}" data-i="${i}" ${i === len - 1 ? "disabled" : ""} title="Down"><ha-icon icon="mdi:arrow-down"></ha-icon></button>
+      <button class="icon sm" data-a="noir_nb_del" data-p="${art}" data-i="${i}" title="Remove"><ha-icon icon="mdi:close"></ha-icon></button></span></div>`;
+  },
+  _nbHome() {
+    const p = this._noirSeite(), items = p ? p.items : this._noirStandard(), sel = this.s.nbSel;
+    const at = (i) => `data-nb="home" data-i="${i}"`;
+    const rows = items.map((it, i) => {
+      const art = this._nbArt(it);
+      const ent = art === "toggle" ? `<input list="nbl-licht" ${at(i)} data-f="entity" value="${esc(it.entity || "")}" placeholder="light.… / switch.…">`
+        : art === "run" ? `<input list="nbl-run" ${at(i)} data-f="entity" value="${esc(it.entity || "")}" placeholder="scene.… / script.…">`
+        : art === "advanced" ? `<button class="btn small ghost" data-a="noir_nb_steps" data-p="home" data-i="${i}"><ha-icon icon="mdi:pencil"></ha-icon>Edit steps</button>`
+        : `<span class="nbmuted">—</span>`;
+      return this._nbZeile("home", i, items.length, `${this._nbIconSel("icon", it.icon, at(i))}
+        <input ${at(i)} data-f="label" value="${esc(it.label || "")}" maxlength="24" placeholder="Name">
+        <select ${at(i)} data-f="opens">${NB_OPENS.map(([k, l]) => `<option value="${k}" ${k === art ? "selected" : ""}>${l}</option>`).join("")}</select>
+        ${ent}
+        <select ${at(i)} data-f="size"><option value="half" ${(it.w || 6) < 6 ? "selected" : ""}>Half</option><option value="full" ${(it.w || 6) >= 6 ? "selected" : ""}>Full</option></select>`)
+        .replace('class="nbrow', `class="nbrow ${sel === i ? "nbsel" : ""}`);
+    }).join("");
+    return {
+      vorschau: this._noirVorschau(items, sel), hint: "Live preview · tap a tile to edit it",
+      karten: `<div class="nbcard"><h3>Tiles on your home screen</h3>
+        <p>Each row is one tile. Choose what it <b>opens</b> – that's all. Order and size update the preview right away.</p>
+        <div class="nbrow nbhead nb-home"><span></span><span>Name</span><span>Opens</span><span>Entity</span><span>Size</span><span></span></div>
+        ${rows}
+        <button class="btn small ghost nbadd" data-a="noir_nb_add" data-p="home"><ha-icon icon="mdi:plus"></ha-icon>Add tile</button></div>
+      <div class="nbcard nbsteps"><div><b>1</b>Add or edit tiles</div><div><b>2</b>Check the preview</div><div><b>3</b>Press <i>Save</i> – the remote updates in seconds</div></div>
+      <div class="inl"><button class="btn small ghost" data-a="noir_reset"><ha-icon icon="mdi:backup-restore"></ha-icon>Reset to default tiles</button></div>`,
+    };
+  },
+  _nbLichtTab() {
+    const p = this._noirLicht(), items = p?.items || [];
+    const at = (i) => `data-nb="lights" data-i="${i}"`;
+    const rows = items.map((it, i) => this._nbZeile("lights", i, items.length, `
+        <input ${at(i)} data-f="label" value="${esc(it.label || "")}" maxlength="24" placeholder="Name">
+        <input list="nbl-licht" ${at(i)} data-f="entity" value="${esc(it.entity || "")}" placeholder="light.… / switch.…">
+        ${(it.entity || "").startsWith("light.") ? `<label class="sw small"><input type="checkbox" ${at(i)} data-f="dim" ${it.dim !== false ? "checked" : ""}><span>Dimmable</span></label>` : `<span class="nbmuted">On/off</span>`}`)).join("");
+    return {
+      vorschau: this._nbVorschauLicht(items), hint: "Tap = on/off · hold = dim",
+      karten: `<div class="nbcard"><h3>Lights on the Lights screen</h3>
+        <p>Pick a light or switch from Home Assistant and give it a short name. Up to 12.</p>
+        ${p ? "" : `<p class="nbnote">No list yet – the remote uses <code>noir_lampen</code> from your YAML. Add a light to start your own list.</p>`}
+        <div class="nbrow nbhead nb-lights"><span>Name</span><span>Entity</span><span>Dimmable</span><span></span></div>
+        ${rows}
+        ${items.length < 12 ? `<button class="btn small ghost nbadd" data-a="noir_nb_add" data-p="lights"><ha-icon icon="mdi:plus"></ha-icon>Add light</button>` : ""}
+        <p class="nbnote"><b>All off</b> on the Scenes screen switches off every light in this list (plus TV, speaker and airco).</p>
+        ${p ? `<button class="linkbtn" data-a="noir_licht_weg">Remove list (use YAML again)</button>` : ""}</div>`,
+    };
+  },
+  _nbScenesTab() {
+    const p = this._noirScenes(), items = p?.items || [];
+    const at = (i) => `data-nb="scenes" data-i="${i}"`;
+    const rows = items.map((it, i) => this._nbZeile("scenes", i, items.length, `${this._nbIconSel("icon", it.icon, at(i))}
+        <input ${at(i)} data-f="label" value="${esc(it.label || "")}" maxlength="24" placeholder="Name">
+        ${(it.steps || []).length ? `<button class="btn small ghost" data-a="noir_nb_steps" data-p="scenes" data-i="${i}"><ha-icon icon="mdi:pencil"></ha-icon>Edit steps (${it.steps.length})</button>`
+          : `<input list="nbl-run" ${at(i)} data-f="entity" value="${esc(it.entity || "")}" placeholder="scene.… / script.…">`}`)).join("");
+    return {
+      vorschau: this._nbVorschauScenes(items), hint: "“Alles uit” is always there",
+      karten: `<div class="nbcard"><h3>Scenes</h3>
+        <p>Each row is one tile on the Scenes screen. It runs a <b>scene</b> or <b>script</b> from Home Assistant.</p>
+        <div class="nbrow nbhead nb-scenes"><span></span><span>Name</span><span>Scene or script</span><span></span></div>
+        ${rows}
+        <button class="btn small ghost nbadd" data-a="noir_nb_add" data-p="scenes"><ha-icon icon="mdi:plus"></ha-icon>Add scene</button>
+        <p class="nbnote">Need more (IR codes, waits, several actions)? Use <b>Edit steps</b> via Settings › Advanced.</p></div>`,
+    };
+  },
+  _nbAudioTab() {
+    const a = this.cfg.noir_audio || {}, at = `data-nb="audio" data-i="0"`;
+    const veld = (k, titel, uitleg, doms) => `<label class="nbveld"><b>${titel}</b><small>${uitleg}</small>${this._nbEntSel(k, a[k] || "", doms, at, "— from YAML —")}</label>`;
+    return {
+      vorschau: this._nbVorschauAudio(), hint: "Speaker, sub and music",
+      karten: `<div class="nbcard"><h3>Audio</h3>
+        <p>Which devices the Audio screen controls. Empty = the value from your YAML.</p>
+        ${veld("kef", "Speaker", "media_player with inputs and volume (e.g. your KEF). The volume keys use it too.", ["media_player"])}
+        ${veld("sub", "Subwoofer level", "number entity for the sub gain (optional).", ["number", "input_number"])}
+        ${veld("music", "Music", "Spotify or Music Assistant media_player – playlists, recent and search.", ["media_player"])}
+        <p class="nbnote">Needs firmware from 24 Nov 2026 or newer (one-time update). After that: just Save.</p></div>`,
+    };
+  },
+  _nbAircoTab() {
+    const velden = [["hi", "HI POWER code", 9, 0, 15], ["eco", "ECO code", 6, 0, 15], ["tmin", "Lowest temperature", 18, 16, 31], ["tmax", "Highest temperature", 30, 16, 31],
+      ["hor", "Vanes horizontal (no swing)", 3, 0, 8], ["ver", "Vanes vertical (no swing)", 6, 0, 12], ["hor_sw", "Horizontal with swing", 0, 0, 8], ["ver_sw", "Vertical with swing", 0, 0, 12],
+      ["start", "Start pulse (µs)", 3200, 1000, 6000]];
+    return {
+      vorschau: this._nbRahmen(`<b class="nvt">Airco</b><b class="nbtemp">21°</b><span class="nvk" style="left:0;top:150px;width:216px;height:38px;justify-content:center">Cool · Auto fan</span>`), hint: "Mitsubishi Heavy via infrared",
+      karten: `<div class="nbcard"><h3>Airco</h3>
+        <p>The Airco screen sends infrared to a <b>Mitsubishi Heavy</b> airco (tested with remote RLA502A704A). It works out of the box – nothing to set.</p>
+        <details class="nbdet"><summary>Fine-tuning (only if your airco doesn't respond right)</summary>
+        <div class="nbgrid2">${velden.map(([k, l, d, mi, ma]) => `<label>${l}<input type="number" min="${mi}" max="${ma}" placeholder="${d}" value="${this.cfg.noir_airco?.[k] ?? ""}" data-nairco="${k}"></label>`).join("")}</div>
+        <small class="note">Empty = default.</small></details></div>`,
+    };
+  },
+  _nbInstTab() {
+    return {
+      vorschau: this._noirVorschau(this._noirSeite()?.items || this._noirStandard()), hint: "Home screen",
+      karten: `<div class="nbcard"><h3>Netflix</h3>
+        <p>The Netflix tile on the TV screen shows <b>Top 10</b>, <b>Popular</b> and <b>Recently started</b>. Posters need a free <b>TMDB key</b>: Settings › Devices &amp; services › ESPHomeRemote › Configure.</p>
+        <small class="note">This product uses the TMDB API but is not endorsed or certified by TMDB.</small></div>
+      <div class="nbcard"><h3>Advanced</h3>
+        <p>Every NOIR screen is a normal menu page. Open it in the menu editor for steps, IR codes, exact positions.</p>
+        <div class="inl">
+          <button class="btn small ghost" data-a="noir_nb_menu" data-id="noir"><ha-icon icon="mdi:view-grid-outline"></ha-icon>Home tiles</button>
+          <button class="btn small ghost" data-a="noir_nb_menu" data-id="noir_licht"><ha-icon icon="mdi:lightbulb-outline"></ha-icon>Lights</button>
+          <button class="btn small ghost" data-a="noir_nb_menu" data-id="noir_scenes"><ha-icon icon="mdi:layers-outline"></ha-icon>Scenes</button></div>
+        <small class="note">Note: changing a tile here in the Builder re-arranges the home grid automatically.</small></div>`,
+    };
   },
   _noirHtml() {
-    const p = this._noirSeite();
-    const items = p ? p.items : this._noirStandard();
-    return `<div class="noirb">
-      <div>${this._noirVorschau(items)}<small class="note">${p ? "Vorschau deiner Kacheln (Seite „noir“ im Menü)." : "Eingebaute Kacheln – noch keine eigenen."}</small></div>
-      <div class="noirbt">
-        <h2><ha-icon icon="mdi:view-grid-outline"></ha-icon> NOIR Thuis</h2>
-        <p>Die Kacheln des NOIR-Startbildschirms stellst du hier ein – <b>ohne neue Firmware</b>. Speichern überträgt sie an die Remote.</p>
-        <div class="inl">
-          <button class="btn" data-a="${p ? "noir_edit" : "noir_new"}"><ha-icon icon="mdi:pencil"></ha-icon>${p ? "Kacheln bearbeiten" : "Eigene Kacheln anlegen"}</button>
-          ${p ? `<button class="btn ghost" data-a="noir_reset"><ha-icon icon="mdi:backup-restore"></ha-icon>Standard</button>
-          <button class="btn ghost" data-a="noir_weg"><ha-icon icon="mdi:delete-outline"></ha-icon>Eigene löschen</button>` : ""}
-        </div>
-        <h3>So geht’s</h3>
-        <ul class="noirhilfe">
-          <li><b>Kacheln bearbeiten</b> öffnet die Seite „noir“ im Menü-Editor: Kachel hinzufügen, verschieben, Größe ziehen, Name und Symbol wählen.</li>
-          <li><b>Was eine Kachel tut</b>: wie im Menü – <i>Aktion</i> führt Schritte aus (Infrarot, Home Assistant, Warten …), <i>Seite</i> öffnet eine Menüseite (z. B. deine Airco-Seite), <i>Eingebaute Seite</i> z. B. Mediaplayer oder <i>NOIR: TV-Bildschirm</i>, <i>Schalter/Licht</i> schaltet die Entität.</li>
-          <li><b>TV wie bisher</b>: Aktion → Funktion der Remote → <i>NOIR: TV-Bildschirm (TV + KEF an)</i>.</li>
-          <li><b>Raster</b>: 6 Spalten; Höhe 2 = große Kachel (Symbol oben, Name unten), Höhe 1 = schmale Leiste. Was nicht auf den Bildschirm passt, scrollt.</li>
-          <li><b>Symbole</b>: alle aus der Symbolauswahl des Menüs; dazu <code>noir:tv</code>, <code>noir:audio</code>, <code>noir:licht</code>, <code>noir:scenes</code> für die NOIR-Linienzeichen.</li>
-        </ul>
-        <small class="note">Die Seite „noir“ erscheint auch in der Liste des Menü-Editors; im normalen Menü der Remote wird sie nur angezeigt, wenn du irgendwo auf sie verlinkst.</small>
-        <h3><ha-icon icon="mdi:layers-outline"></ha-icon> NOIR Scènes</h3>
-        <p>Szenen für den Bildschirm Scènes – <b>ohne neue Firmware</b>. „Alles uit“ (Lampen, TV, KEF, Klima aus) ist immer dabei. ${this._noirScenes() ? `${(this._noirScenes().items || []).filter((i) => i.label).length} eigene Szene(n).` : "Noch keine eigenen Szenen."}</p>
-        <div class="inl">
-          <button class="btn" data-a="noir_scenes"><ha-icon icon="mdi:pencil"></ha-icon>${this._noirScenes() ? "Szenen bearbeiten" : "Szenen anlegen"}</button>
-          ${this._noirScenes() ? `<button class="btn ghost" data-a="noir_scenes_weg"><ha-icon icon="mdi:delete-outline"></ha-icon>Szenen löschen</button>` : ""}
-        </div>
-        <ul class="noirhilfe">
-          <li>Jede Kachel = eine Szene: <b>Name</b>, <b>Symbol</b> und <b>Schritte</b> – Home Assistant (z. B. <code>light.turn_on</code> mit Helligkeit), Infrarot, Warten, Funktionen der Remote (z. B. <i>NOIR: Alles aus</i>).</li>
-          <li>Oder ohne Schritte nur eine <b>Entität</b>: <code>scene.…</code> oder <code>script.…</code> aus Home Assistant wird gestartet.</li>
-          <li>Die Kachel <b>Scènes</b> auf NOIR Thuis braucht die Funktion <i>NOIR: Szenen-Bildschirm</i>.</li>
-        </ul>
-        <h3><ha-icon icon="mdi:netflix"></ha-icon> NOIR Netflix</h3>
-        <p>Die Netflix-Kachel des TV-Bildschirms öffnet ein Netflix-Dashboard: <b>Top 10 in den Niederlanden</b> (offizielle Wochenliste von Netflix), <b>Beliebt auf Netflix</b> und <b>Zuletzt gestartet</b> – als Posterreihen, Antippen = Details und „Afspelen in Netflix“. Play/Stop/Spulen der Remote steuern dort den TV.</p>
-        <ul class="noirhilfe">
-          <li>Poster, Beschreibungen und „Beliebt“ brauchen einen kostenlosen <b>TMDB-Schlüssel</b>: Einstellungen → Geräte &amp; Dienste → ESPHomeRemote → Konfigurieren. Ohne Schlüssel nur die Titel der Top 10.</li>
-          <li>Home Assistant braucht dafür Internet zu <code>www.netflix.com</code>, <code>api.themoviedb.org</code> und <code>image.tmdb.org</code>.</li>
-          <li>This product uses the TMDB API but is not endorsed or certified by TMDB.</li>
-        </ul>
-        <h3><ha-icon icon="mdi:air-conditioner"></ha-icon> NOIR Airco (Mitsubishi Heavy, IR)</h3>
-        <p>Feinabstimmung des Infrarot-Signals – <b>ohne neue Firmware</b>. Leer = Standard (getestet mit RLA502A704A).</p>
-        <div class="noirairco">${[["hi", "HI POWER Code", 9, 0, 15], ["eco", "ECO Code", 6, 0, 15], ["tmin", "Temperatur min", 18, 16, 31], ["tmax", "Temperatur max", 30, 16, 31],
-          ["hor", "Lamellen horizontal (ohne Swing)", 3, 0, 8], ["ver", "Lamellen vertikal (ohne Swing)", 6, 0, 12], ["hor_sw", "Horizontal bei Swing", 0, 0, 8], ["ver_sw", "Vertikal bei Swing", 0, 0, 12],
-          ["start", "Startimpuls (µs)", 3200, 1000, 6000]].map(([k, l, d, mi, ma]) =>
-          `<label class="inl">${l} <input type="number" min="${mi}" max="${ma}" placeholder="${d}" value="${this.cfg.noir_airco?.[k] ?? ""}" data-nairco="${k}" style="width:6em"></label>`).join("<br>")}</div>
-        <h3><ha-icon icon="mdi:lightbulb-outline"></ha-icon> NOIR Verlichting</h3>
-        <p>Lampen für den Bildschirm Verlichting (Antippen = an/aus, lange drücken = dimmen). ${this._noirLicht() ? `${(this._noirLicht().items || []).filter((i) => i.entity).length} Lampe(n) eingestellt.` : "Noch keine Liste – es gilt <code>noir_lampen</code> aus der YAML."}</p>
-        <div class="inl">
-          <button class="btn" data-a="noir_licht"><ha-icon icon="mdi:pencil"></ha-icon>${this._noirLicht() ? "Lampen bearbeiten" : "Lampenliste anlegen"}</button>
-          ${this._noirLicht() ? `<button class="btn ghost" data-a="noir_licht_weg"><ha-icon icon="mdi:delete-outline"></ha-icon>Liste löschen</button>` : ""}
-        </div>
-        <ul class="noirhilfe">
-          <li>Jede Kachel mit Entität = eine Lampe: <b>Name</b> = Beschriftung, <b>Entität</b> = <code>light.…</code> oder <code>switch.…</code>. Reihenfolge = Reihenfolge der Kacheln.</li>
-          <li><code>light.…</code> ist dimmbar (lange drücken); der Zustand kommt live aus Home Assistant.</li>
-          <li>Die Kachel <b>Verlichting</b> auf NOIR Thuis braucht die Funktion <i>NOIR: Verlichting (Lampen)</i>.</li>
-        </ul>
-      </div></div>`;
+    const tab = this.s.nbTab || "home";
+    const t = { home: this._nbHome, lights: this._nbLichtTab, scenes: this._nbScenesTab, audio: this._nbAudioTab, airco: this._nbAircoTab, settings: this._nbInstTab }[tab].call(this);
+    return `<div class="nbw">
+      <div class="nbkopf"><h2>NOIR Builder</h2><p>Build the screens of your remote. Left is what your remote shows. Press <b>Save</b> – no new firmware needed.</p></div>
+      <div class="nbtabs">${NB_TABS.map(([k, l, ic]) => `<button class="nbtab ${k === tab ? "on" : ""}" data-a="noir_nb_tab" data-tab="${k}"><ha-icon icon="${ic}"></ha-icon>${l}</button>`).join("")}</div>
+      <div class="nbmain"><div class="nbphone">${t.vorschau}<small class="nbhint">${t.hint}</small></div>
+        <div class="nbed">${t.karten}</div></div>${this._nbEntListen()}</div>`;
   },
 
   // Skins (2026-11-19): [[skin_nr, Name]] wie in der Firmware (eingebaute 0-5, eigene 10+i)
@@ -8423,7 +8596,7 @@ const SEITEN_REMOTE = [
   ["ueber", "Übersicht", "mdi:heart-pulse"],
   ["keys", "Tasten", "mdi:gesture-tap-button"],
   ["home", "Startseite", "mdi:view-dashboard-outline"],
-  ["noir", "NOIR", "mdi:view-grid-outline"],
+  ["noir", "NOIR Builder", "mdi:view-grid-outline"],
   ["dockanz", "Smart Display", "mdi:tablet-dashboard"],
   ["menu", "Menü", "mdi:menu-open"],
   ["gesten", "Gesten", "mdi:gesture"],

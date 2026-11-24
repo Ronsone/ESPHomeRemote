@@ -488,6 +488,32 @@ ha-icon { --mdc-icon-size:20px; }
 .noirv .nvtxt { position:absolute; font-size:12px; color:#969aa3; }
 .noirv .nvfuss { position:absolute; left:12px; right:12px; top:270px; height:42px; display:flex; gap:8px; }
 .noirv .nvfuss .nvk { position:relative; flex:1; justify-content:center; background:rgba(16,18,22,.7); border-radius:14px; }
+/* NOIR Builder (2026-11-24) */
+.nbw { padding:6px 4px; max-width:1180px; } .nbkopf h2 { margin:0 0 2px; font-size:22px; font-weight:600; } .nbkopf p { margin:0 0 14px; color:var(--secondary-text-color); }
+.nbtabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+.nbtab { display:inline-flex; align-items:center; gap:7px; padding:8px 15px; border-radius:999px; border:1px solid var(--divider-color); background:var(--card-background-color); color:var(--primary-text-color); font:inherit; cursor:pointer; }
+.nbtab ha-icon { --mdc-icon-size:18px; opacity:.8; } .nbtab.on { background:var(--primary-text-color); color:var(--card-background-color); border-color:var(--primary-text-color); font-weight:600; }
+.nbmain { display:flex; gap:26px; align-items:flex-start; flex-wrap:wrap; } .nbphone { flex:none; display:flex; flex-direction:column; align-items:center; position:sticky; top:8px; }
+.nbhint { color:var(--secondary-text-color); margin-top:8px; font-size:12px; } .nbed { flex:1 1 520px; min-width:0; }
+.nbcard { border:1px solid var(--divider-color); border-radius:14px; padding:14px 16px; margin-bottom:12px; background:var(--card-background-color); }
+.nbcard h3 { margin:0 0 4px; font-size:15px; } .nbcard > p { margin:0 0 10px; color:var(--secondary-text-color); font-size:13px; }
+.nbrow { display:grid; gap:8px; align-items:center; padding:6px 0; border-top:1px solid var(--divider-color); }
+.nbrow.nb-home { grid-template-columns:58px 1fr 1.3fr 1.3fr 80px 100px; } .nbrow.nb-lights { grid-template-columns:1fr 1.6fr 110px 100px; } .nbrow.nb-scenes { grid-template-columns:58px 1fr 1.6fr 100px; }
+.nbrow.nbhead { border-top:0; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--secondary-text-color); padding-bottom:0; }
+.nbrow.nbsel { background:rgba(59,130,246,.10); border-radius:10px; box-shadow:inset 3px 0 0 #3b82f6; }
+.nbrow input:not([type=checkbox]), .nbrow select, .nbveld select { width:100%; box-sizing:border-box; min-width:0; }
+.nbico { position:relative; display:inline-flex; align-items:center; justify-content:center; width:46px; height:34px; border-radius:9px; border:1px solid var(--divider-color); }
+.nbico select { position:absolute; inset:0; opacity:0; cursor:pointer; } .nbico ha-icon { --mdc-icon-size:20px; }
+.nbacts { display:flex; gap:2px; justify-content:flex-end; } .nbmuted { color:var(--secondary-text-color); }
+.nbadd { margin-top:8px; } .nbnote { color:var(--secondary-text-color); font-size:12px; margin:10px 0 0; }
+.nbsteps { display:flex; gap:10px; } .nbsteps div { flex:1; font-size:13px; color:var(--secondary-text-color); }
+.nbsteps b { display:inline-flex; width:20px; height:20px; border-radius:50%; background:#3b82f6; color:#fff; font-size:11px; align-items:center; justify-content:center; margin-right:6px; }
+.nbveld { display:flex; flex-direction:column; gap:3px; margin:10px 0; } .nbveld small { color:var(--secondary-text-color); }
+.nbdet summary { cursor:pointer; color:var(--secondary-text-color); margin-top:4px; } .nbgrid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; margin:10px 0 6px; }
+.nbgrid2 label { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:13px; } .nbgrid2 input { width:6em; }
+.noirv .nvk[data-a] { cursor:pointer; } .noirv .nvk.nbsel { outline:2px solid #6aa8ff; outline-offset:1px; } .noirv .nvk.nbaus { color:#9aa0a8; }
+.noirv .nbtemp { position:absolute; left:0; right:0; top:54px; text-align:center; font-size:56px; font-weight:300; }
+@media (max-width:900px) { .nbrow.nb-home { grid-template-columns:50px 1fr 1fr; } .nbrow.nb-home > :nth-child(4), .nbrow.nb-home > :nth-child(5) { grid-column:span 1; } .nbphone { position:static; } }
 .skinvs { display:inline-flex; align-items:center; gap:3px; padding:4px; border-radius:6px; border:1px solid var(--divider-color); flex:0 0 auto; }
 .skinvs > span { display:inline-flex; flex-direction:column; align-items:flex-start; font-size:11px; line-height:1.1; padding:2px 6px; border-radius:4px; border:1px solid; font-weight:600; }
 .skinvs > span small { font-size:9px; font-weight:400; } .skinvs > i { width:8px; height:18px; border-radius:3px; display:inline-block; }

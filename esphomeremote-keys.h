@@ -1295,6 +1295,7 @@ inline void noir_starten(bool aan, const char *kef, const char *licht, const cha
   noir::nf::d().bewaar = [](const std::string &v) { noir_nf_laatst->value() = v; };
   // NOIR Airco (2026-11-22): IR-frame via de gewone IR-stap (zelf/dock/HA-blaster), stand bewaard in een global
   noir::airco::inst_laden(tk_cfg->wurzel()["noir_airco"]);   // instellingen uit de configurator
+  noir::audio::cfg_laden(tk_cfg->wurzel()["noir_audio"]);   // NOIR Builder: speaker, sub, muziek (2026-11-24)
   noir::airco::uitpakken(noir_airco_stand->value());
   noir::airco::zender() = [](const std::string &j) { tk_cfg->ir_test(j); };
   noir::airco::opslaan() = [](int v) { noir_airco_stand->value() = v; };
@@ -1434,6 +1435,7 @@ inline void einrichten() {
     noir::thuis_herbouwen(noir_items());   // NOIR-builder: tegels uit de configurator (2026-11-22)
     noir_lampen_laden();                    // NOIR Verlichting: pagina "noir_licht" uit de configurator
     noir::airco::inst_laden(tk_cfg->wurzel()["noir_airco"]);   // NOIR Airco: instellingen uit de configurator
+    noir::audio::cfg_laden(tk_cfg->wurzel()["noir_audio"]);   // NOIR Audio: entiteiten uit de NOIR Builder
     noir::airco::tonen();
     noir::licht_herbouwen();
     noir::scenes_herbouwen();               // NOIR Scènes: pagina "noir_scenes" uit de configurator

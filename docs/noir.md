@@ -1,148 +1,117 @@
-# NOIR / SIGNATURE op de OpenRemote Rev6
+# NOIR – how it works
 
-Het NOIR-startscherm uit het bouwpakket (`simulator/main.c`, LVGL 8.3) is overgezet naar LVGL 9.5 op deze firmware.
-Display, touch, toetsen (TCA8418), IR, Bluetooth, dock en Home Assistant blijven de bestaande Aggro600-drivers.
+NOIR is a set of touch screens for the OpenRemote Rev6. You set it up in **three steps**:
 
-## Wat er is
+| Step | Where | Once or often? |
+|---|---|---|
+| **1. Flash the firmware** | ESPHome | Once (and for updates) |
+| **2. Install the integration** | Home Assistant → HACS | Once |
+| **3. Build your screens** | Home Assistant → ESPHomeRemote → **NOIR Builder** | As often as you like – no new firmware |
 
-- **NOIR Thuis** als startscherm: statusbalk (klok, HA-punt, accu), titel *NOIR / SIGNATURE*, tandwiel, vier tegels
-  (TV, Audio, Verlichting, Scènes) en onderaan *Terug* / *Thuis*. Posities, maten, kleuren, Inter-letters, Lucide-iconen
-  en de Obsidian-wallpaper komen 1-op-1 uit de simulator (240 × 320).
-- **Tegels:** TV → de gewone Aggro600-startpagina van de activiteit (nu-afspelen, activiteitenbalk, toetsen naar de tv);
-  Audio → de mediapagina; Verlichting / Scènes → een menupagina uit de configurator (`noir_licht_seite`,
-  `noir_scenes_seite`, leeg = menu); tandwiel → menu. Menutoets → menu → Terug brengt je terug op NOIR Thuis.
-- **KEF LSX II:** de fysieke toetsen Lauter / Leiser / Stumm gaan op **elk** scherm naar `noir_kef_entity`
-  (`media_player.volume_up` / `volume_down` / `volume_mute`), vóór alle scherm- en invoerlogica en vóór de
-  toetsindeling. Ingedrukt houden herhaalt elke 300 ms. Ze lopen over dezelfde route als andere HA-acties van de remote
-  (wifi, Bluetooth-link of dock, met wachtrij na het wekken). In de toetsentest worden ze niet doorgestuurd.
-- **Skin NOIR** (nr. 6) voor de rest van de firmware (menu, instellingen): dezelfde grafietkleuren.
+<p align="center"><img src="noir/builder.png" alt="NOIR Builder in Home Assistant" width="100%"></p>
 
-## NOIR-builder: tegels van NOIR Thuis in de configurator
+---
 
-Configurator → je remote → **NOIR**: voorbeeld in NOIR-stijl en de knop *Eigen tegels aanmaken* / *Tegels bewerken*.
-De tegels zijn de items van de menupagina **`noir`** en worden in de gewone menu-editor bewerkt (toevoegen, slepen,
-grootte, naam, icoon, stappen). Opslaan = direct op de remote, **zonder compileren**.
+## 1. Firmware
 
-- Raster 6 kolommen; hoogte 2 = grote tegel (icoon boven, naam onder), hoogte 1 = smalle balk. Te veel = scrollen.
-- Tik: *Actie* voert de stappen uit, *Pagina* opent een menupagina, *Ingebouwde pagina* bijv. Mediaspeler of
-  *NOIR: TV-scherm*, *Schakelaar/Licht/Rolluik* schakelt de entiteit.
-- TV zoals voorheen: Actie → Functie van de remote → *NOIR: TV-scherm (TV + KEF aan)* (`noir_tv`).
-- Iconen: alle `mdi:`-iconen uit de icoonkeuze, plus `noir:tv`, `noir:audio`, `noir:licht`, `noir:scenes`.
-- Geen pagina `noir` = de ingebouwde tegels.
-
-## NOIR TV-scherm
-
-Tik op **TV** in NOIR Thuis:
-1. De remote start de activiteit **TV** uit de configurator (`noir_tv_activiteit`). Zet daar bij *Beim Starten*
-   de stappen die de tv en de KEF aanzetten: IR LG Power On, `media_player.turn_on` en `media_player.select_source`
-   (`tv`) op de KEF, eventueel een wachttijd. Loopt de activiteit al maar staat de tv uit, dan lopen de stappen opnieuw.
-2. Het NOIR TV-scherm opent: status uit HA (*Aan · bron* / *Uit* / *Niet bereikbaar*), aan/uit-knop
-   (uit = `media_player.turn_off`, aan = de activiteit), zes app-tegels (PS5, Switch, Netflix, YouTube, Cookie IPTV, Plex)
-   die `noir_tv_script` aanroepen met `tv_source` uit `noir_tv_bronnen`.
-3. Fysieke toetsen op dit scherm: D-pad, OK, Terug en Home gaan via `webostv.button` naar de tv (pijlen herhalen bij
-   ingedrukt houden). Volume blijft naar de KEF gaan. Terug/Thuis op het scherm gaan naar NOIR Thuis.
-
-## NOIR Verlichting
-
-Tegel *Verlichting* (of functie *NOIR: Verlichting (Lampen)* op een eigen tegel) opent een eigen NOIR-scherm (simulator
-`build(3)`): per lamp een brede knop *Naam · Aan/Uit* of, dimbaar, *Naam · 65%*. Tikken = aan/uit (`light.toggle`,
-`switch.toggle`), lang drukken op een dimbare lamp = dimvenster met schuifregelaar (`light.turn_on brightness_pct` bij
-loslaten, 0 = uit). De echte stand komt elke 3 s uit HA (`/api/esphomeremote/states`), alleen zolang het scherm open is.
-
-Lampen komen uit de configurator (NOIR → *Lampenliste anlegen*: menupagina `noir_licht`, elke kachel met entiteit is een
-lamp, `light.*` = dimbaar) – zonder te compileren. Zonder die pagina geldt `noir_lampen` uit de YAML.
-
-## NOIR Airco (Mitsubishi Heavy Industries, infrarood)
-
-Tegel *Airco* (of functie *NOIR: Airco*) opent het airco-scherm: aan/uit, temperatuur (- / + of de pijltjestoetsen,
-OK = aan/uit), modus (Auto, Koel, Droog, Fan, Warm), fan (Auto, 1-4) en swing (uit, op/neer, links/rechts, alles).
-Elke wijziging stuurt de hele stand als een IR-frame in het protocol van de MHI-afstandsbediening RLA502A704A
-(SRK..ZS), via dezelfde IR-route als de andere knoppen. De remote kan de airco niet uitlezen: hij onthoudt de laatst
-gestuurde stand (global `noir_airco_stand`). Met `noir_airco_seite` gezet opent de tegel de menupagina zoals voorheen.
-
-## NOIR Scènes
-
-Tegel *Scènes* (functie *NOIR: Szenen-Bildschirm*) opent het scènes-scherm. Vooraan staat altijd **Alles uit**: alle
-lampen uit de lampenlijst, de tv, de KEF en de airco (IR) uit - ook als functie *NOIR: Alles aus* voor knoppen of
-activiteiten. Eigen scènes maak je zonder te compileren in de configurator (NOIR -> *Szenen anlegen*: menupagina
-`noir_scenes`); elke kachel voert zijn stappen uit (HA, IR, wachten, functies van de remote) of start zonder stappen
-een `scene.`- of `script.`-entiteit uit HA.
-
-## NOIR Netflix-dashboard
-
-De Netflix-tegel van het TV-scherm start Netflix en opent het dashboard (functie *NOIR: Netflix-Dashboard*):
-
-- **Top 10 in Nederland**: de officiele weeklijst van Netflix (Tudum, elke dinsdag nieuw), als posterrij met grote
-  rode rangnummers.
-- **Populair op Netflix**: TMDB discover (provider Netflix, regio NL), dagelijks.
-- **Laatst gestart**: de laatste 4 titels die je via de remote opende (global `noir_nf_laatst`).
-- Tik op een poster: detailscherm met achtergrond, jaar, genre, seizoenen, Kijkwijzer, Nederlandse tekst en
-  **Afspelen in Netflix** (actie `esphomeremote.tv_app` met `content` = het Netflix-nummer uit Wikidata (P1874, via
-  de Wikidata-id van TMDB) - de LG opent de serie direct; zonder nummer opent alleen Netflix). Staat de tv uit, dan
-  eerst de TV-activiteit en na 8 s openen.
-- Fysieke knoppen op deze schermen: play/pauze (`media_play_pause`), stop, terug-/vooruitspoelen (webOS `STOP`,
-  `REWIND`, `FASTFORWARD`), D-pad en OK. *Terug*: detail → dashboard → TV-scherm.
-
-De integratie (`netflix.py`) haalt alles op en levert het aan de remote via HA (`/api/esphomeremote/netflix`,
-posters als RGB565 64×96 en achtergrond 216×110 via `/api/esphomeremote/netflix/img`) - de remote zelf hoeft niet
-op internet. HA wel: `www.netflix.com`, `api.themoviedb.org`, `image.tmdb.org`, `query.wikidata.org`. Posters, teksten en Populair
-vragen een gratis **TMDB-sleutel** (Instellingen → Apparaten & diensten → ESPHomeRemote → Configureren); zonder
-sleutel alleen de Top 10-titels. *This product uses the TMDB API but is not endorsed or certified by TMDB.*
-
-## NOIR UI-instellingen
-
-Het tandwiel op NOIR Thuis opent *UI-instellingen* (simulator `build(13)`): **Skin** (NOIR / Obsidian, SIGNATURE /
-Graphite, PURE / Black, Nautisch / Navy, Eigen = kleuren van de actieve Aggro600-skin), **Wallpaper** (Obsidian / satijn,
-Graphite / zacht, Effen) en **Afronding** (8-20 px, elke tik +2). Een skin kiezen zet ook afronding en wallpaper van die
-skin, zoals in de simulator. Alles wordt bewaard (globals `noir_ui_*`). *Alle instellingen (menu)* opent het gewone
-Aggro600-menu. De NOIR-lagen doen niet mee met de Aggro600-skins (vlag `LV_OBJ_FLAG_USER_4`).
-
-## Instellen (je eigen `esphomeremote.yaml`)
+Build the Rev6 firmware with ESPHome. Only these lines matter for NOIR:
 
 ```yaml
 substitutions:
-  noir_aan: "true"                               # "false" = gewone Aggro600-startpagina
-  noir_kef_entity: "media_player.kef_lsx_ii"     # exacte entity_id uit HA (leeg = volumetoetsen volgens toetsindeling)
-  noir_licht_seite: ""                           # id van een menupagina uit de configurator, of leeg
-  noir_scenes_seite: ""
-  noir_airco_seite: ""                           # menupagina met je airco-knoppen (IR/HA), leeg = menu
-  noir_tv_entity: "media_player.woonkamer_lg_webos_tv_oled65b56la_deuqljp"
-  noir_tv_activiteit: "TV"                       # naam van de activiteit in de configurator
-  noir_tv_script: "script.tv_bron_kef"
-  noir_tv_bronnen: "PS5 Gameconsole|HDMI 2|Netflix|YouTube|Cookie IPTV|Plex"
-  noir_lampen: "Woonkamer=light.woonkamer_lamp|Keuken=switch.keuken|Gang=light.lamp_gang"   # of leeg + configurator
+  noir_aan: "true"                  # "false" = the normal ESPHomeRemote home page
+  noir_tv_entity: media_player.your_lg_tv
+  noir_tv_activiteit: "TV"          # name of your TV activity in the configurator
 ```
 
-In HA: Instellingen → Apparaten → ESPHome → de remote → *Dit apparaat toestaan Home Assistant-acties uit te voeren*
-moet aan staan, anders komen de KEF-opdrachten niet aan.
+Everything else (lights, scenes, audio) can be set in the NOIR Builder.
 
-## Nog niet overgezet (volgende stappen uit de bouwgids)
+In Home Assistant, turn on **"Allow the device to perform Home Assistant actions"** for the remote
+(Settings → Devices → ESPHome → your remote). Without it the remote can't switch anything.
 
-Audio- en Scènes-schermen in NOIR-stijl, letterwiel/QWERTY (tekstinvoer), Spotify, encoder, wallpaper
-Grand Line. Die gebruiken nu de bestaande Aggro600-pagina's (in skin NOIR).
+## 2. Integration
 
-## Audio (KEF + Spotify) - 2026-11-22
+HACS → ⋮ → Custom repositories → `https://github.com/ronsone/ESPHomeRemote` (type *Integration*) → install
+**ESPHomeRemote** → restart Home Assistant → add the integration.
 
-Tegel **Audio** opent NOIR Audio zodra `noir_kef_entity` of `noir_spotify` is ingevuld (anders de media-pagina zoals voorheen).
+Optional: a free **TMDB key** (Settings → Devices & services → ESPHomeRemote → Configure) gives Netflix posters.
 
-- **Audio**: KEF aan/uit, "nu speelt" (tik = Spotify), ingangen (wifi, bluetooth, tv, optical, analog, usb), volume en subwoofer.
-- **Spotify**: hoes, titel/artiest, voortgang, shuffle/herhalen, jouw playlists, recent gespeeld, Spotify Connect-apparaten.
-  Play/pauze, vorige/volgende: fysieke toetsen. Volume: altijd de KEF.
+## 3. NOIR Builder
 
-Substitutions:
+Open **ESPHomeRemote** in the Home Assistant sidebar, pick your remote, open **NOIR Builder**.
+Left is a live preview of the remote. Right are simple rows. Press **Save** when done.
+
+| Tab | What you set |
+|---|---|
+| **Home** | The tiles on the home screen. Per tile: icon, name, what it **opens**, size (half / full). |
+| **Lights** | The lights on the Lights screen: name, entity, dimmable. *All off* uses this list. |
+| **Scenes** | Tiles on the Scenes screen. Each runs a `scene.…` or `script.…`. *All off* is always there. |
+| **Audio** | Speaker (e.g. KEF), subwoofer level and music player (Spotify or Music Assistant). |
+| **Airco** | Nothing needed. Fine-tuning for the infrared code is folded away. |
+| **Settings** | Netflix info and *Advanced*: open any NOIR screen in the full menu editor. |
+
+### What a tile can open
+
+| Opens | Does |
+|---|---|
+| TV screen | Starts your TV activity and shows the TV screen |
+| Audio & music | Speaker, inputs, volume, sub, playlists, search |
+| Lights / Scenes / Airco screen | Opens that screen |
+| Netflix | Top 10, popular, recently started |
+| Remote settings | Skin, wallpaper, corner radius |
+| Toggle an entity | Switches a light or switch on/off |
+| Run a scene or script | Starts a Home Assistant scene or script |
+| Advanced (steps) | Your own steps: IR codes, HA actions, waits … (menu editor) |
+
+The Builder places tiles by itself: two half tiles side by side, a full tile on its own row.
+
+---
+
+## The screens
+
+| Screen | Touch | Keys |
+|---|---|---|
+| **Home** | Tap a tile | D-pad + OK |
+| **TV** | Power, apps and sources | D-pad, OK, Back, Home go to the TV |
+| **Netflix** | Tap a poster → details → *Play* | Play/pause, seek |
+| **Audio** | Power, input, volume, sub; tap *now playing* → music | Volume keys always control the speaker |
+| **Music** | Playlists, recent, devices, search (letter wheel or keyboard) | Play/pause, next/previous |
+| **Lights** | Tap = on/off, hold = dim | – |
+| **Scenes** | Tap a scene | – |
+| **Airco** | Temperature, mode, fan, swing, HI POWER, ECO | – |
+
+**Power key:** hold 3 seconds for the shut-down prompt.
+**Wi-Fi:** bars in the status bar. Lost Wi-Fi? *Settings → Restore Wi-Fi*. After 4 minutes without Wi-Fi the remote restarts by itself.
+
+---
+
+## Music: Spotify or Music Assistant
+
+Choose the music player in **Audio**:
+
+- **Spotify** media_player – uses the official Spotify integration. The remote first turns the speaker on, sets it
+  to Wi-Fi and makes it the Spotify Connect device, then plays.
+- **Music Assistant** player – playlists, recent and search over all your sources (Spotify, radio, own music).
+  The screen is then called *Muziek*. No Spotify Connect needed.
+
+## Optional YAML fallbacks
+
+If you don't use the Builder for a screen, these substitutions still work:
 
 ```yaml
-  noir_kef_entity: media_player.woonkamer_2
-  noir_kef_sub:    number.woonkamer_sw_gain
-  noir_spotify:    media_player.woonkamer_spotify_rons_rosenquist
+  noir_kef_entity: media_player.your_speaker
+  noir_kef_sub:    number.your_sub_gain
+  noir_spotify:    media_player.spotify_you        # or a Music Assistant player
+  noir_lampen:     "Living=light.living|Kitchen=switch.kitchen"
+  noir_tv_script:  script.tv_source
+  noir_tv_bronnen: "PS5|HDMI 2|Netflix|YouTube|IPTV|Plex"
 ```
 
-De integratie levert `/api/esphomeremote/spotify` (lijsten uit het bladeren van de Spotify-media_player) en
-`/api/esphomeremote/spotify/img` (hoesjes 96/64 px RGB565). De stand komt uit `/states` (elke 2 s zolang het scherm open is).
+What you set in the Builder always wins over the YAML.
 
-### Music Assistant (2026-11-23)
+## Network
 
-Zet `noir_spotify` op een **Music Assistant-speler** (bv. de KEF via AirPlay) in plaats van de Spotify-entiteit.
-De integratie herkent dat en haalt playlists, recent gespeeld en zoekresultaten (alle bronnen: Spotify, radio,
-eigen muziek, …) uit Music Assistant. Het scherm heet dan "Muziek". Afspelen gaat met `media_player.play_media`
-op die speler - geen Spotify Connect-apparaat meer nodig.
+The remote only talks to Home Assistant (port 8123). Posters, covers and lists come from the integration,
+so the remote never needs the internet itself. Home Assistant needs access to `api.themoviedb.org`,
+`image.tmdb.org`, `www.netflix.com` and Spotify / Music Assistant.
+
+<sub>This product uses the TMDB API but is not endorsed or certified by TMDB.</sub>
