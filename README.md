@@ -34,7 +34,14 @@ Full guide: [docs/noir.md](docs/noir.md).
 
 ## Simulator
 
-All NOIR screens run on a PC (SDL2 + LVGL 9.5). Mouse = finger, arrow keys/Enter/Backspace = D-pad/OK/Back. `--demo` saves a screenshot of every screen.
+All NOIR screens run on a PC (SDL2 + LVGL 9.5) with the same screen code as the firmware: **[simulator/](simulator/)**.
+Mouse = finger, arrow keys/Enter/Backspace = D-pad/OK/Back. `--demo` saves a screenshot of every screen.
+
+```bash
+cd simulator
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+./build/noir-simulator
+```
 
 ## Credits
 
