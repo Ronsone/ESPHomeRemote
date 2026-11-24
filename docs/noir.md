@@ -45,7 +45,7 @@ Left is a live preview of the remote. Right are simple rows. Press **Save** when
 | **Home** | The tiles on the home screen. Per tile: icon, name, what it **opens**, size (half / full). |
 | **Lights** | The lights on the Lights screen: name, entity, dimmable. *All off* uses this list. |
 | **Scenes** | Tiles on the Scenes screen. Each runs a `scene.…` or `script.…`. *All off* is always there. |
-| **Audio** | Speaker (e.g. KEF), subwoofer level and music player (Spotify or Music Assistant). |
+| **Audio** | Speaker (e.g. KEF), subwoofer level and your Music Assistant player. |
 | **Airco** | Nothing needed. Fine-tuning for the infrared code is folded away. |
 | **Settings** | Netflix info and *Advanced*: open any NOIR screen in the full menu editor. |
 
@@ -84,14 +84,17 @@ The Builder places tiles by itself: two half tiles side by side, a full tile on 
 
 ---
 
-## Music: Spotify or Music Assistant
+## Music: Music Assistant
 
-Choose the music player in **Audio**:
+All music goes through **Music Assistant** (MA). Spotify, radio, your own files … are sources *inside* MA.
 
-- **Spotify** media_player – uses the official Spotify integration. The remote first turns the speaker on, sets it
-  to Wi-Fi and makes it the Spotify Connect device, then plays.
-- **Music Assistant** player – playlists, recent and search over all your sources (Spotify, radio, own music).
-  The screen is then called *Muziek*. No Spotify Connect needed.
+1. Install Music Assistant in Home Assistant (Settings → Devices & services → Add integration → Music Assistant;
+   choose the official app). Add your music sources and enable a player provider for your speaker (e.g. Chromecast).
+2. NOIR Builder → **Audio → Music**: pick the MA player of your speaker. Only MA players are listed.
+3. On the remote: Audio → *Muziek* shows playlists, recently played and search. Tap = play on that player.
+
+**Separate networks (VLANs)?** MA must reach the speaker, and the speaker fetches the stream from MA:
+allow HA → speaker (Chromecast TCP 8009) and speaker → HA (TCP 8097), and repeat mDNS between the networks.
 
 ## Optional YAML fallbacks
 
@@ -100,7 +103,7 @@ If you don't use the Builder for a screen, these substitutions still work:
 ```yaml
   noir_kef_entity: media_player.your_speaker
   noir_kef_sub:    number.your_sub_gain
-  noir_spotify:    media_player.spotify_you        # or a Music Assistant player
+  noir_muziek:     media_player.your_ma_player     # Music Assistant player
   noir_lampen:     "Living=light.living|Kitchen=switch.kitchen"
   noir_tv_script:  script.tv_source
   noir_tv_bronnen: "PS5|HDMI 2|Netflix|YouTube|IPTV|Plex"
@@ -112,6 +115,6 @@ What you set in the Builder always wins over the YAML.
 
 The remote only talks to Home Assistant (port 8123). Posters, covers and lists come from the integration,
 so the remote never needs the internet itself. Home Assistant needs access to `api.themoviedb.org`,
-`image.tmdb.org`, `www.netflix.com` and Spotify / Music Assistant.
+`image.tmdb.org`, `www.netflix.com` and Music Assistant.
 
 <sub>This product uses the TMDB API but is not endorsed or certified by TMDB.</sub>

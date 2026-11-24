@@ -1,9 +1,9 @@
 <h1 align="center">NOIR / SIGNATURE</h1>
 
 <p align="center"><b>A dark, minimal home-control UI for the OpenRemote Rev6, running on ESPHome and Home Assistant.</b><br>
-TV, Netflix, KEF audio with Spotify, lights, scenes and air conditioning – driven by the touch screen <i>and</i> the physical keys.</p>
+TV, Netflix, KEF audio with Music Assistant, lights, scenes and air conditioning – driven by the touch screen <i>and</i> the physical keys.</p>
 
-<p align="center"><img src="docs/noir/hero.png" alt="NOIR screens: Home, TV, Netflix, Audio, Spotify" width="100%"></p>
+<p align="center"><img src="docs/noir/hero.png" alt="NOIR screens: Home, TV, Netflix, Audio, Music" width="100%"></p>
 <p align="center"><img src="docs/noir/more.png" alt="NOIR screens: Netflix detail, letter wheel search, search results, lights, air conditioning" width="100%"></p>
 <p align="center"><sub>Screenshots from the NOIR simulator (LVGL 9, 240 × 320). Titles and artwork are placeholders. The UI language is Dutch.</sub></p>
 
@@ -15,7 +15,7 @@ TV, Netflix, KEF audio with Spotify, lights, scenes and air conditioning – dri
 | **TV** | LG webOS: power, app/source tiles (PS5, Switch, Netflix, YouTube, IPTV, Plex). The D-pad, OK, Back and Home keys control the TV. |
 | **Netflix** | Official weekly Top 10 for the Netherlands, *Popular on Netflix* and *Recently started*, all with posters (TMDB). A detail screen with a **Play** button opens the title directly on the TV. Play/pause and seek use the physical keys. |
 | **Audio** | KEF LSX II: power, inputs (Wi-Fi, Bluetooth, TV, Optical, Aux, USB), volume and **subwoofer level**. The volume keys always control the KEF. |
-| **Spotify** | Now playing with album art and progress, shuffle/repeat, your playlists, recently played, Spotify Connect device picker and **search** (letter wheel or QWERTY). |
+| **Music** | Via **Music Assistant**: now playing with album art and progress, shuffle/repeat, your playlists, recently played and **search** over all MA sources (letter wheel or QWERTY). |
 | **Lights & Scenes** | Lights from the configurator, with tap to toggle and hold to dim. Scenes, plus a built-in *All off*. |
 | **Airco** | Mitsubishi Heavy Industries over IR (temperature, mode, fan, swing, HI POWER, ECO). |
 | **Settings** | Four skins, wallpapers and corner radius. |

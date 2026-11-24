@@ -1134,7 +1134,7 @@ inline void noir_item_uitvoeren(JsonObjectConst it) {
   if (t == "page") { noir_menupagina(it["target"] | ""); return; }
   if (t == "special") {
     const std::string pg = it["page"] | "";
-    if (pg == "media") noir_actie(noir::AUDIO);   // NOIR Audio als KEF/Spotify ingesteld is, anders de media-pagina
+    if (pg == "media") noir_actie(noir::AUDIO);   // NOIR Audio als KEF/muziek ingesteld is, anders de media-pagina
     else if (pg == "noir_tv") noir_actie(noir::TV);
     else spezial_zeigen(pg);
     return;
@@ -1149,7 +1149,7 @@ inline void noir_item_uitvoeren(JsonObjectConst it) {
 inline void noir_actie(int a) {
   if (a >= noir::SCENE && a < noir::SCENE + 40) { noir_scene(a - noir::SCENE); return; }
   if (a >= noir::NF_TITEL && a < noir::NF_TITEL + 300) { noir::nf_detail_tonen(a - noir::NF_TITEL); return; }   // NOIR Netflix
-  // NOIR Audio + Spotify (2026-11-22)
+  // NOIR Audio + Muziek (2026-11-22, sinds 2026-11-25 alleen Music Assistant)
   if (a >= noir::AUDIO_BRON && a < noir::AUDIO_BRON + noir::audio::BRONNEN) { noir::audio::bron_kiezen(a - noir::AUDIO_BRON); return; }
   if (a >= noir::ZOEK_TOETS && a < noir::ZOEK_TOETS + 26) { noir::audio::zoek_toets(a - noir::ZOEK_TOETS); return; }
   if (a >= noir::ZOEK_RES && a < noir::ZOEK_RES + 10) {
@@ -1157,8 +1157,8 @@ inline void noir_actie(int a) {
     noir::toast(noir::audio::d().titel.c_str());
     return;
   }
-  if (a >= noir::SP_LIJST && a < noir::SP_APPARAAT + 10) {
-    if (noir::audio::lijst_actie(a, noir::SP_LIJST, noir::SP_RECENT, noir::SP_APPARAAT) && a < noir::SP_APPARAAT) noir::toast(noir::audio::d().titel.c_str());
+  if (a >= noir::SP_LIJST && a < noir::SP_RECENT + 100) {
+    if (noir::audio::lijst_actie(a, noir::SP_LIJST, noir::SP_RECENT)) noir::toast(noir::audio::d().titel.c_str());
     return;
   }
   if (a >= noir::ITEM) { noir_item_actie(a - noir::ITEM); return; }
@@ -1186,13 +1186,13 @@ inline void noir_actie(int a) {
         noir::toast("TV aan");
       }
       break;
-    case noir::AUDIO:   // NOIR Audio (KEF + Spotify); zonder KEF/Spotify-entiteit de media-pagina zoals voorheen
-      if (!noir::audio::d().kef.empty() || !noir::audio::d().spotify.empty()) { noir::zeigen_seite(noir::S_AUDIO); break; }
+    case noir::AUDIO:   // NOIR Audio (KEF + muziek); zonder KEF/muziek-entiteit de media-pagina zoals voorheen
+      if (!noir::audio::d().kef.empty() || !noir::audio::d().muziek.empty()) { noir::zeigen_seite(noir::S_AUDIO); break; }
       media_from->value() = 0;
       media_home_ms->value() = 0;
       seite_zeigen(page_media, LV_SCR_LOAD_ANIM_MOVE_LEFT);
       break;
-    case noir::AUDIO_SPOTIFY: noir::zeigen_seite(noir::S_SPOTIFY); break;
+    case noir::AUDIO_MUZIEK: noir::zeigen_seite(noir::S_MUZIEK); break;
     case noir::AUDIO_AANUIT: noir::audio::aanuit(); break;
     case noir::SP_SHUFFLE: noir::audio::shuffle_wissel(); break;
     case noir::SP_REPEAT: noir::audio::repeat_wissel(); break;
@@ -1251,8 +1251,8 @@ inline void noir_actie(int a) {
     case noir::TERUG:
       if (noir::st().seite == noir::S_NF_DETAIL) noir::zeigen_seite(noir::S_NETFLIX);   // detail -> Netflix
       else if (noir::st().seite == noir::S_NETFLIX) noir::zeigen_seite(noir::S_TV);   // Netflix -> TV -> Thuis
-      else if (noir::st().seite == noir::S_SPOTIFY) noir::zeigen_seite(noir::S_AUDIO);   // Spotify -> Audio -> Thuis
-      else if (noir::st().seite == noir::S_ZOEK) noir::zeigen_seite(noir::S_SPOTIFY);   // Zoeken -> Spotify
+      else if (noir::st().seite == noir::S_MUZIEK) noir::zeigen_seite(noir::S_AUDIO);   // Muziek -> Audio -> Thuis
+      else if (noir::st().seite == noir::S_ZOEK) noir::zeigen_seite(noir::S_MUZIEK);   // Zoeken -> Muziek
       else if (noir::st().seite != noir::S_THUIS) noir::zeigen_seite(noir::S_THUIS);
       else nav_back->execute();
       break;

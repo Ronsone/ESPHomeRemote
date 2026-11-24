@@ -7479,10 +7479,12 @@ const EinstTab = {
       .map((e) => `<option value="${esc(e)}">${esc(name(e))}</option>`).join("")}</datalist>`;
     return dl("nbl-licht", ["light", "switch", "input_boolean", "fan"]) + dl("nbl-run", ["scene", "script"]);
   },
-  _nbEntSel(feld, wert, doms, extra, leer = "— not set —") {
+  _nbEntSel(feld, wert, doms, extra, leer = "— not set —", platform = null) {
     const st = this._hass?.states || {};
     const name = (e) => st[e]?.attributes?.friendly_name || e;
-    const alle = Object.keys(st).filter((e) => doms.includes(e.split(".")[0])).sort((a, b) => name(a).localeCompare(name(b)));
+    const reg = this._hass?.entities || {};   // Entitaetsregister im Frontend: Plattform je Entitaet
+    const alle = Object.keys(st).filter((e) => doms.includes(e.split(".")[0]) && (!platform || reg[e]?.platform === platform))
+      .sort((a, b) => name(a).localeCompare(name(b)));
     if (wert && !alle.includes(wert)) alle.unshift(wert);
     return `<select ${extra} data-f="${feld}"><option value="">${leer}</option>${alle.map((e) => `<option value="${esc(e)}" ${e === wert ? "selected" : ""}>${esc(name(e))} · ${esc(e)}</option>`).join("")}</select>`;
   },
@@ -7657,14 +7659,16 @@ const EinstTab = {
   },
   _nbAudioTab() {
     const a = this.cfg.noir_audio || {}, at = `data-nb="audio" data-i="0"`;
-    const veld = (k, titel, uitleg, doms) => `<label class="nbveld"><b>${titel}</b><small>${uitleg}</small>${this._nbEntSel(k, a[k] || "", doms, at, "— from YAML —")}</label>`;
+    const veld = (k, titel, uitleg, doms, pf) => `<label class="nbveld"><b>${titel}</b><small>${uitleg}</small>${this._nbEntSel(k, a[k] || "", doms, at, "— from YAML —", pf)}</label>`;
+    const ma = Object.values(this._hass?.entities || {}).some((x) => x.platform === "music_assistant" && x.entity_id?.startsWith("media_player."));
     return {
       vorschau: this._nbVorschauAudio(), hint: "Speaker, sub and music",
       karten: `<div class="nbcard"><h3>Audio</h3>
         <p>Which devices the Audio screen controls. Empty = the value from your YAML.</p>
         ${veld("kef", "Speaker", "media_player with inputs and volume (e.g. your KEF). The volume keys use it too.", ["media_player"])}
         ${veld("sub", "Subwoofer level", "number entity for the sub gain (optional).", ["number", "input_number"])}
-        ${veld("music", "Music", "Spotify or Music Assistant media_player – playlists, recent and search.", ["media_player"])}
+        ${veld("music", "Music", "Music Assistant player – playlists, recent and search from all your MA sources (Spotify, radio, files …).", ["media_player"], "music_assistant")}
+        ${ma ? "" : `<p class="nbnote"><b>Music Assistant not found.</b> Add the Music Assistant integration in Home Assistant first – then its players show up here.</p>`}
         <p class="nbnote">Needs firmware from 24 Nov 2026 or newer (one-time update). After that: just Save.</p></div>`,
     };
   },

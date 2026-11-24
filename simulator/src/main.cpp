@@ -100,20 +100,18 @@ static uint8_t *verloop_(int w, int h, uint32_t a, uint32_t b, int soort) {
 }
 static void audio_voorbeeld() {
   audio::Data &x = audio::d();
-  audio::instellen("media_player.woonkamer_2", "number.woonkamer_sw_gain", "media_player.woonkamer_spotify_rons_rosenquist");
+  audio::instellen("media_player.woonkamer_2", "number.woonkamer_sw_gain", "media_player.woonkamer");
   x.kef_state = "on"; x.bron = 0; x.volume = 38; x.sub = 2; x.sub_bekend = true;
   x.sp_state = "playing"; x.titel = "Midnight Drive"; x.artiest = "Nova Lane"; x.album = "City Lights";
-  x.apparaat = "KEF LSX II"; x.pos = 83; x.duur = 214; x.shuffle = true; x.repeat = 0; x.cover = 1;
+  x.pos = 83; x.duur = 214; x.shuffle = true; x.repeat = 0; x.cover = 1;
   const uint32_t kl[9][2] = {{0x1E3A8A, 0xF472B6}, {0x0F766E, 0xA7F3D0}, {0x7C2D12, 0xFBBF24}, {0x312E81, 0x22D3EE},
                              {0x111827, 0x9CA3AF}, {0x701A75, 0xF0ABFC}, {0x064E3B, 0x84CC16}, {0x7F1D1D, 0xFCA5A5}, {0x0C4A6E, 0xE0F2FE}};
   for (int i = 0; i < 9; i++) audio::beeld_vullen(x.covers[i + 1], verloop_(96, 96, kl[i][0], kl[i][1], i % 4), 96, 96);
   const char *pl[6][2] = {{"Avond chill", "52 nummers"}, {"Focus", "Instrumentaal"}, {"Roadtrip", "Rons"}, {"Jaren 90", "Rons"},
                           {"Synthwave", "38 nummers"}, {"Zondag", "Akoestisch"}};
-  for (int i = 0; i < 6; i++) x.playlists.push_back({pl[i][0], pl[i][1], "spotify:playlist:voorbeeld" + std::to_string(i), "playlist", 2 + i % 8});
+  for (int i = 0; i < 6; i++) x.playlists.push_back({pl[i][0], pl[i][1], "library://playlist/" + std::to_string(i), "playlist", 2 + i % 8});
   const char *rc[4][2] = {{"City Lights", "Nova Lane"}, {"Deep Blue", "Kaito"}, {"Low Tide", "Mira Vos"}, {"Signals", "The Arcs"}};
-  for (int i = 0; i < 4; i++) x.recent.push_back({rc[i][0], rc[i][1], "spotify:album:voorbeeld" + std::to_string(i), "album", 1 + (i * 3) % 9});
-  x.ma = getenv("NOIR_MA") != nullptr;   // Music Assistant-weergave
-  x.apparaten = {{"KEF LSX II", "", "kef", ""}, {"LG TV", "", "lg", ""}, {"OPPO Find X5 Pro", "", "tel", ""}};
+  for (int i = 0; i < 4; i++) x.recent.push_back({rc[i][0], rc[i][1], "library://album/" + std::to_string(i), "album", 1 + (i * 3) % 9});
 }
 
 // Een tegel van NOIR Thuis uitvoeren (zoals tasten::noir_item_uitvoeren)
@@ -137,8 +135,8 @@ static void actie(int a) {
   if (a >= AUDIO_BRON && a < AUDIO_BRON + audio::BRONNEN) { audio::bron_kiezen(a - AUDIO_BRON); return; }
   if (a >= ZOEK_TOETS && a < ZOEK_TOETS + 26) { audio::zoek_toets(a - ZOEK_TOETS); return; }
   if (a >= ZOEK_RES && a < ZOEK_RES + 10) { audio::zoek_spelen(a - ZOEK_RES); toast(audio::d().titel.c_str()); return; }
-  if (a >= SP_LIJST && a < SP_APPARAAT + 10) {
-    if (audio::lijst_actie(a, SP_LIJST, SP_RECENT, SP_APPARAAT)) toast(a >= SP_APPARAAT ? audio::d().apparaat.c_str() : audio::d().titel.c_str());
+  if (a >= SP_LIJST && a < SP_RECENT + 100) {
+    if (audio::lijst_actie(a, SP_LIJST, SP_RECENT)) toast(audio::d().titel.c_str());
     return;
   }
   if (a >= ITEM) { item_uitvoeren(a - ITEM); return; }
@@ -159,7 +157,7 @@ static void actie(int a) {
       else { tv_status("on", "Live TV"); toast("TV aan"); }
       break;
     case AUDIO: zeigen_seite(S_AUDIO); break;
-    case AUDIO_SPOTIFY: zeigen_seite(S_SPOTIFY); break;
+    case AUDIO_MUZIEK: zeigen_seite(S_MUZIEK); break;
     case AUDIO_AANUIT: audio::aanuit(); break;
     case SP_SHUFFLE: audio::shuffle_wissel(); break;
     case SP_REPEAT: audio::repeat_wissel(); break;
@@ -168,7 +166,7 @@ static void actie(int a) {
     case ZOEK_SPATIE: audio::zoek_spatie(); break;
     case ZOEK_GA: {   // simulator: HA nagebootst met vaste resultaten
       audio::zoek_ga();
-      const char *tsv = "z\tMidnight Drive\tNova Lane\tspotify:track:1\ttrack\nz\tMidnight Drive (Live)\tNova Lane\tspotify:track:2\ttrack\nz\tMidnight City Echo\tKaito\tspotify:track:3\ttrack\nz\tAfter Midnight\tMira Vos\tspotify:track:4\ttrack\n";
+      const char *tsv = "z\tMidnight Drive\tNova Lane\tlibrary://track/1\ttrack\nz\tMidnight Drive (Live)\tNova Lane\tlibrary://track/2\ttrack\nz\tMidnight City Echo\tKaito\tlibrary://track/3\ttrack\nz\tAfter Midnight\tMira Vos\tlibrary://track/4\ttrack\n";
       uint8_t *b = (uint8_t *) malloc(strlen(tsv)); memcpy(b, tsv, strlen(tsv));
       nf::Taak t{"", 0, 'z', 4096};
       nf::d().rij.clear();
@@ -222,8 +220,8 @@ static void actie(int a) {
     case TERUG:
       if (st().seite == S_NF_DETAIL) zeigen_seite(S_NETFLIX);
       else if (st().seite == S_NETFLIX) zeigen_seite(S_TV);
-      else if (st().seite == S_SPOTIFY) zeigen_seite(S_AUDIO);
-      else if (st().seite == S_ZOEK) zeigen_seite(S_SPOTIFY);
+      else if (st().seite == S_MUZIEK) zeigen_seite(S_AUDIO);
+      else if (st().seite == S_ZOEK) zeigen_seite(S_MUZIEK);
       else if (st().seite != S_THUIS) zeigen_seite(S_THUIS);
       break;
     case THUIS: zeigen_seite(S_THUIS); break;
@@ -321,27 +319,27 @@ static void demo_cb(lv_timer_t *tm) {
                               {SCENES, "demo-04-scenes.bmp"}, {AIRCO, "demo-05-airco.bmp"}, {NETFLIX, "demo-06-netflix.bmp"},
                               {NF_TITEL + 0, "demo-07-netflix-detail.bmp"}, {INSTELLINGEN, "demo-08-instellingen.bmp"},
                               {KNOPTEST, "demo-09-knoppentest.bmp"}, {AUDIO, "demo-10-audio.bmp"},
-                              {-2, "demo-10b-audio-onder.bmp"}, {AUDIO_SPOTIFY, "demo-11-spotify.bmp"},
-                              {-1, "demo-11b-spotify-onder.bmp"}, {-3, "demo-11c-spotify-apparaten.bmp"}, {-4, "demo-12-test.bmp"}, {-5, "demo-13-lees.bmp"}, {-6, "demo-14-letterwiel.bmp"}, {-8, "demo-14b-qwerty.bmp"}, {-7, "demo-15-zoekresultaat.bmp"}};
+                              {-2, "demo-10b-audio-onder.bmp"}, {AUDIO_MUZIEK, "demo-11-muziek.bmp"},
+                              {-1, "demo-11b-muziek-onder.bmp"}, {-4, "demo-12-test.bmp"}, {-5, "demo-13-lees.bmp"}, {-6, "demo-14-letterwiel.bmp"}, {-8, "demo-14b-qwerty.bmp"}, {-7, "demo-15-zoekresultaat.bmp"}};
   const int n = sizeof(stappen) / sizeof(stappen[0]);
   if (stap > 0) schermafdruk(stappen[stap - 1].bestand);
   if (stap >= n) { lv_timer_delete(tm); std::exit(0); }
   if (stappen[stap].actie == -2) lv_obj_scroll_to_y(st().audio_body, 200, LV_ANIM_OFF);
-  else if (stappen[stap].actie == -1) lv_obj_scroll_to_y(st().spotify_body, 190, LV_ANIM_OFF);
+  else if (stappen[stap].actie == -1) lv_obj_scroll_to_y(st().muziek_body, 190, LV_ANIM_OFF);
   else if (stappen[stap].actie == -5) {
     nf::url_basis() = []() { return std::string("http://ha:8123/api/esphomeremote/states?k=K"); };
     JsonDocument doc;
     deserializeJson(doc, R"({"media_player.woonkamer_2":["on",-1,45,"","","",false,false,"","","tv",-1,0,0],
       "number.woonkamer_sw_gain":["-3.0",-1,-1,"dB",-10,10,1],
-      "media_player.woonkamer_spotify_rons_rosenquist":["playing",-1,50,"","Echte Titel","Echte Artiest",false,true,"one","Spotify","KEF LSX II",30.0,200.0,4.5]})");
+      "media_player.woonkamer":["playing",-1,50,"","Echte Titel","Echte Artiest",false,true,"one","Music Assistant","",30.0,200.0,4.5]})");
     audio::lees_(doc);
-    const char *tsv = "p\tLijst A\t\tspotify://x/spotify:playlist:1\tspotify://playlist\np\tLijst B\t\tid2\tspotify://playlist\nr\tNummer C\t\tid3\tspotify://track\nd\tKEF LSX II\nd\tLG TV\n";
+    const char *tsv = "p\tLijst A\tPlaylist\tlibrary://playlist/1\tplaylist\np\tLijst B\t\tspotify--x://playlist/2\tplaylist\nr\tNummer C\tArtiest\tlibrary://track/3\ttrack\n";
     uint8_t *b = (uint8_t *) malloc(strlen(tsv)); memcpy(b, tsv, strlen(tsv));
     nf::Taak t{"", 0, 'a', 8192};
     audio::klaar_(t, 200, b, strlen(tsv));
     audio::Data &x = audio::d();
-    std::printf("[test] bron=%d vol=%d sub=%d titel=%s rep=%d shuf=%d pos=%d duur=%d pl=%zu rc=%zu dev=%zu rij=%zu\n", x.bron, x.volume, x.sub,
-      x.titel.c_str(), x.repeat, x.shuffle, x.pos, x.duur, x.playlists.size(), x.recent.size(), x.apparaten.size(), nf::d().rij.size());
+    std::printf("[test] bron=%d vol=%d sub=%d titel=%s rep=%d shuf=%d pos=%d duur=%d pl=%zu rc=%zu rij=%zu\n", x.bron, x.volume, x.sub,
+      x.titel.c_str(), x.repeat, x.shuffle, x.pos, x.duur, x.playlists.size(), x.recent.size(), nf::d().rij.size());
     for (auto &q : nf::d().rij) std::printf("[test] rij %c %s\n", q.soort, q.url.c_str());
     zeigen_seite(S_AUDIO);
   }
@@ -352,8 +350,7 @@ static void demo_cb(lv_timer_t *tm) {
   }
   else if (stappen[stap].actie == -8) { actie(ZOEK_INVOER); }
   else if (stappen[stap].actie == -7) actie(ZOEK_GA);
-  else if (stappen[stap].actie == -4) { actie(SP_LIJST + 1); actie(AUDIO_BRON + 3); actie(SP_SHUFFLE); actie(SP_APPARAAT + 1); toets(2); toets(11); }
-  else if (stappen[stap].actie == -3) lv_obj_scroll_to_y(st().spotify_body, 400, LV_ANIM_OFF);
+  else if (stappen[stap].actie == -4) { actie(SP_LIJST + 1); actie(AUDIO_BRON + 3); actie(SP_SHUFFLE); toets(2); toets(11); }
   else actie(stappen[stap].actie);
   if (stappen[stap].actie == LICHT) actie(LAMP + 0);
   stap++;

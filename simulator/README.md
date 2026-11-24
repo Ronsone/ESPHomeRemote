@@ -12,10 +12,10 @@ IR and the internet are simulated: whatever the remote would send to Home Assist
 NOIR Thuis (home, tiles from the configurator) · TV (apps, power) · Verlichting (lights: tap = on/off, long press =
 dimmer) · Scènes (incl. built-in "Alles uit") · Airco (Mitsubishi Heavy IR: temperature, mode, fan, swing, HI POWER,
 ECO) · Netflix dashboard (Top 10 NL, Popular, Recently started, detail screen) · UI settings (skin, wallpaper, corner
-radius) · Audio (speaker, inputs, volume, sub) · Spotify / Music Assistant (now playing, playlists, devices) ·
+radius) · Audio (speaker, inputs, volume, sub) · Muziek via Music Assistant (now playing, playlists, recent) ·
 Search (letter wheel and keyboard) · Knoppentest (button test).
 
-Environment variables: `NOIR_MA=1` (Music Assistant mode), `NOIR_README=1` (abstract posters), `NOIR_GEEN_WIFI=1` (no Wi-Fi).
+Environment variables: `NOIR_README=1` (abstract posters), `NOIR_GEEN_WIFI=1` (no Wi-Fi).
 
 ## Build
 
