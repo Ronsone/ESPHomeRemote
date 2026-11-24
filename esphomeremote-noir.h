@@ -580,12 +580,20 @@ inline void einmal_() {
   if (c != nullptr) { esp_http_client_close(c); esp_http_client_cleanup(c); }
   q.buf = buf; q.len = len; q.status = status; q.fertig = true;
 }
-inline void taak_(void *) { for (;;) { ulTaskNotifyTake(pdTRUE, portMAX_DELAY); einmal_(); } }
+inline void taak_(void *) {
+  UBaseType_t laagste = ~0u;
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    einmal_();
+    const UBaseType_t vrij = uxTaskGetStackHighWaterMark(nullptr);   // minst vrije stapel tot nu toe (bytes)
+    if (vrij < laagste) { laagste = vrij; ESP_LOGD("noir", "%s: stapel minimaal %u bytes vrij", pcTaskGetName(nullptr), (unsigned) vrij); }
+  }
+}
 inline void starten_() {
   Abfrage &q = a();
   if (q.taak == nullptr) {
     static StaticTask_t tcb;
-    const size_t groesse = 4096;
+    const size_t groesse = 8192;   // 2026-11-25: 4096 was te krap voor esp_http_client (DNS/lwIP) - overloop gaf panics
     auto *stapel = (StackType_t *) heap_caps_malloc(groesse, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (stapel != nullptr) q.taak = xTaskCreateStaticPinnedToCore(taak_, "noir_licht", groesse, nullptr, 1, stapel, &tcb, tskNO_AFFINITY);
   }
@@ -1188,12 +1196,20 @@ inline void einmal_() {
   if (c != nullptr) { esp_http_client_close(c); esp_http_client_cleanup(c); }
   a.buf = buf; a.len = len; a.status = status; a.fertig = true;
 }
-inline void taak_(void *) { for (;;) { ulTaskNotifyTake(pdTRUE, portMAX_DELAY); einmal_(); } }
+inline void taak_(void *) {
+  UBaseType_t laagste = ~0u;
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    einmal_();
+    const UBaseType_t vrij = uxTaskGetStackHighWaterMark(nullptr);   // minst vrije stapel tot nu toe (bytes)
+    if (vrij < laagste) { laagste = vrij; ESP_LOGD("noir", "%s: stapel minimaal %u bytes vrij", pcTaskGetName(nullptr), (unsigned) vrij); }
+  }
+}
 inline void starten_(const Taak &t) {
   Abfrage &a = q();
   if (a.handle == nullptr) {
     static StaticTask_t tcb;
-    const size_t groesse = 4096;
+    const size_t groesse = 8192;   // 2026-11-25: 4096 was te krap voor esp_http_client (DNS/lwIP) - overloop gaf panics
     auto *stapel = (StackType_t *) heap_caps_malloc(groesse, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (stapel != nullptr) a.handle = xTaskCreateStaticPinnedToCore(taak_, "noir_nf", groesse, nullptr, 1, stapel, &tcb, tskNO_AFFINITY);
   }
