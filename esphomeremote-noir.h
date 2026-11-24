@@ -1383,7 +1383,7 @@ inline lv_obj_t *nf_poster_(lv_obj_t *p, const nf::Titel &t, int x, int y, int w
                    lv_obj_set_style_bg_color(b, k(SURF), 0); lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
                    lv_obj_remove_flag(b, (lv_obj_flag_t) (LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE)); }
   lv_obj_set_style_radius(b, 8, 0);
-  // geen clip_corner (2026-11-25): op de remote tekent LVGL die laag niet gewist - ruis in posters/hoesjes
+  lv_obj_set_style_clip_corner(b, true, 0);
   lv_obj_add_flag(b, LV_OBJ_FLAG_SCROLL_CHAIN_HOR);   // vegen schuift de rij, niet de knop
   lv_obj_t *l = label(b, t.naam.c_str(), 0, 0, w - 6, f.f12, TEXT2);
   lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_WRAP);
@@ -1473,6 +1473,7 @@ inline void nf_detail_bouwen(lv_obj_t *laag, const Fonts &f) {
   lv_obj_set_pos(bd, 0, 0);
   lv_obj_set_size(bd, 216, 110);
   lv_obj_set_style_radius(bd, 12, 0);
+  lv_obj_set_style_clip_corner(bd, true, 0);
   lv_obj_set_style_bg_color(bd, k(SURF), 0);
   lv_obj_set_style_bg_opa(bd, LV_OPA_COVER, 0);
   lv_obj_remove_flag(bd, (lv_obj_flag_t) (LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
@@ -2010,6 +2011,7 @@ inline lv_obj_t *cover_vak_(lv_obj_t *p, int x, int y, int maat, int sleutel, co
   lv_obj_set_pos(v, x, y);
   lv_obj_set_size(v, maat, maat);
   lv_obj_set_style_radius(v, maat >= 80 ? 10 : 6, 0);
+  lv_obj_set_style_clip_corner(v, true, 0);
   lv_obj_set_style_bg_color(v, k(SURF2), 0);
   lv_obj_set_style_bg_opa(v, LV_OPA_COVER, 0);
   lv_obj_remove_flag(v, (lv_obj_flag_t) (LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
